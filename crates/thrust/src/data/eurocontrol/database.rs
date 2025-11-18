@@ -5,6 +5,8 @@
 use std::hash::Hash;
 use std::{collections::HashMap, path};
 
+use geodesy::prelude::*;
+use once_cell::sync::Lazy;
 use serde::Serialize;
 
 use crate::data::field15::{Connector, Field15Element, Modifier, Point};
@@ -45,6 +47,9 @@ const VALID_ROUTE_PREFIXES: [&str; 32] = [
     "H", "J", "Q", "R", "T", "V", "W", "Y", "Z", "M", "N", "P",
 ];
 
+/// The WGS84 ellipsoid.
+static WGS84: Lazy<Ellipsoid> = Lazy::new(|| Ellipsoid::named("WGS84").unwrap());
+
 /**
  * A resolved route consisting of candidate route segments, based on their name.
  */
@@ -62,8 +67,11 @@ pub struct ResolvedRoute {
 pub struct ResolvedRouteSegment {
     pub start: ResolvedPoint,
     pub end: ResolvedPoint,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub altitude: Option<Altitude>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub speed: Option<Speed>,
 }
 
@@ -77,6 +85,38 @@ pub enum ResolvedPoint {
     DesignatedPoint(DesignatedPoint),
     Coordinates { latitude: f64, longitude: f64 },
     None,
+}
+
+impl std::fmt::Display for ResolvedPoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResolvedPoint::Navaid(navaid) => write!(
+                f,
+                "Navaid({:#?}: {:.3},{:.3})",
+                navaid.name, navaid.latitude, navaid.longitude
+            ),
+            ResolvedPoint::DesignatedPoint(dp) => write!(
+                f,
+                "DesignatedPoint({}: {:.3}, {:.3})",
+                dp.designator, dp.latitude, dp.longitude
+            ),
+            ResolvedPoint::Coordinates { latitude, longitude } => {
+                write!(f, "Coordinates(lat: {}, lon: {})", latitude, longitude)
+            }
+            ResolvedPoint::None => write!(f, "None"),
+        }
+    }
+}
+
+impl From<&ResolvedPoint> for Coor2D {
+    fn from(val: &ResolvedPoint) -> Self {
+        match val {
+            ResolvedPoint::Navaid(navaid) => Coor2D::raw(navaid.latitude, navaid.longitude),
+            ResolvedPoint::DesignatedPoint(dp) => Coor2D::raw(dp.latitude, dp.longitude),
+            ResolvedPoint::Coordinates { latitude, longitude } => Coor2D::raw(*latitude, *longitude),
+            ResolvedPoint::None => Coor2D::default(),
+        }
+    }
 }
 
 impl PartialEq for ResolvedPoint {
@@ -480,7 +520,62 @@ impl AirwayDatabase {
         }
 
         // 6. Break the tie for remaining multiple candidate points
-        // TODO
+        let mut last_known: Option<ResolvedPoint> = None;
+
+        for i in 0..resolved.len() {
+            if let EnrichedCandidates::Point((points, _, _)) = &resolved[i] {
+                if points.len() > 1 {
+                    // Find the next definitive point ahead
+                    let mut next_definitive: Option<&ResolvedPoint> = None;
+                    for candidate in resolved.iter() {
+                        match candidate {
+                            EnrichedCandidates::Point((pts, _, _)) if pts.len() == 1 => {
+                                next_definitive = pts.first();
+                                break;
+                            }
+                            EnrichedCandidates::PointCoords((pt, _, _)) => {
+                                next_definitive = Some(pt);
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    // Score all candidates if we have both reference points
+                    if let (Some(a), Some(b)) = (&last_known, next_definitive) {
+                        let mut best_idx = 0;
+                        let mut best_score = f64::INFINITY;
+
+                        for (idx, candidate) in points.iter().enumerate() {
+                            let score = score_hybrid(&a.into(), &b.into(), &candidate.into());
+                            if score < best_score {
+                                best_score = score;
+                                best_idx = idx;
+                            }
+                        }
+
+                        // Keep only the best candidate
+                        if let EnrichedCandidates::Point((points, _, _)) = &mut resolved[i] {
+                            let best = points[best_idx].clone();
+                            points.clear();
+                            points.push(best);
+                        }
+                    }
+                }
+
+                // Update last_known point
+                if let EnrichedCandidates::Point((pts, _, _)) = &resolved[i] {
+                    if let Some(pt) = pts.first() {
+                        last_known = Some(pt.clone());
+                    }
+                }
+            } else if let EnrichedCandidates::PointCoords((pt, _, _)) = &resolved[i] {
+                last_known = Some(pt.clone());
+            }
+        }
+
+        // 7. Build the final sequence of resolved route segments.
+        // ...existing code...
 
         // 7. Build the final sequence of resolved route segments.
         let mut segments = Vec::new();
@@ -538,4 +633,21 @@ impl AirwayDatabase {
         }
         segments
     }
+}
+
+fn score_hybrid(a: &Coor2D, b: &Coor2D, x: &Coor2D) -> f64 {
+    // Ideally gap_ration is close to 1.0 and the bearing difference close to 0.0
+    let ab = WGS84.geodesic_inv(a, b).to_degrees();
+    let ax = WGS84.geodesic_inv(a, x).to_degrees();
+    let xb = WGS84.geodesic_inv(x, b).to_degrees();
+
+    // Think about triangular inequality, we want x to be "between" a and b
+    let gap_ratio = (ax[2] + xb[2]) / ab[2].max(1e-9);
+
+    let delta_a = (ax[0] - ab[0]).abs().min(360.0 - (ax[0] - ab[0]).abs());
+    let delta_b = (xb[0] - ab[0]).abs().min(360.0 - (xb[0] - ab[0]).abs());
+    let bearing_diff = (delta_a + delta_b) / 2.0; // Normalize to [0,1]
+
+    // Combine the two metrics into a score
+    bearing_diff / 180. + (gap_ratio - 1.0).max(0.)
 }

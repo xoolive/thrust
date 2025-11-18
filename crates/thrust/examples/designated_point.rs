@@ -1,5 +1,5 @@
 use polars::prelude::*;
-use std::{collections::HashMap, env, path::Path};
+use std::{env, path::Path};
 use thrust::data::eurocontrol::aixm::designated_point::parse_designated_point_zip_file;
 
 fn main() {
