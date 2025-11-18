@@ -19,8 +19,6 @@ fn main() {
                 "second_letter" => routes.values().map(|route| route.second_letter.clone()).collect::<Vec<_>>(),
                 "number" => routes.values().map(|route| route.number.clone()).collect::<Vec<_>>(),
                 "multiple_identifier" => routes.values().map(|route| route.multiple_identifier.clone()).collect::<Vec<_>>(),
-                "begin_position" => routes.values().map(|route| route.begin_position.clone()).collect::<Vec<_>>(),
-                "end_position" => routes.values().map(|route| route.end_position.clone()).collect::<Vec<_>>(),
             ) {
                 println!("{df:?}");
             }

@@ -1,3 +1,14 @@
+//! AIXM (Aeronautical Information Exchange Model) data parsers.
+//!
+//! This module provides parsers for various AIXM data types such as airports,
+//! heliports, designated points, navaids, routes, and route segments.
+//!
+//! The parsers are provided under an open source license and can be used to read
+//! and process AIXM XML data files provided by EUROCONTROL B2B services under
+//! a specific license agreement.
+
+use std::collections::HashMap;
+
 use quick_xml::{events::Event, name::QName, Reader};
 
 pub mod airport_heliport;
@@ -6,18 +17,46 @@ pub mod navaid;
 pub mod route;
 pub mod route_segment;
 
+struct Node<'a> {
+    name: QName<'a>,
+    attributes: HashMap<String, String>,
+}
+
 fn find_node<'a, R: std::io::BufRead>(
     reader: &mut Reader<R>,
     lookup: Vec<QName<'a>>,
     end: Option<QName>,
-) -> Result<QName<'a>, Box<dyn std::error::Error>> {
+) -> Result<Node<'a>, Box<dyn std::error::Error>> {
     let mut buf = Vec::new();
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 for elt in lookup.iter() {
                     if e.name() == *elt {
-                        return Ok(*elt);
+                        let mut attributes = HashMap::new();
+
+                        for attr in e.attributes().with_checks(false) {
+                            let attr = attr?;
+                            let key = std::str::from_utf8(attr.key.0)?;
+                            attributes.insert(key.to_string(), attr.unescape_value()?.to_string());
+                        }
+
+                        return Ok(Node { name: *elt, attributes });
+                    }
+                }
+            }
+            Ok(Event::Empty(ref e)) => {
+                for elt in lookup.iter() {
+                    if e.name() == *elt {
+                        let mut attributes = HashMap::new();
+
+                        for attr in e.attributes().with_checks(false) {
+                            let attr = attr?;
+                            let key = std::str::from_utf8(attr.key.0)?;
+                            attributes.insert(key.to_string(), attr.unescape_value()?.to_string());
+                        }
+
+                        return Ok(Node { name: *elt, attributes });
                     }
                 }
             }
@@ -51,4 +90,28 @@ fn read_text<R: std::io::BufRead>(reader: &mut Reader<R>, end: QName) -> Result<
         buf.clear();
     }
     Ok(text)
+}
+
+pub fn read_attribute<R: std::io::BufRead>(
+    reader: &mut Reader<R>,
+    attr_name: QName,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                for attr in e.attributes().with_checks(false) {
+                    let attr = attr?;
+                    if attr.key == attr_name {
+                        return Ok(Some(attr.unescape_value()?.to_string()));
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(Box::new(e)),
+            _ => (),
+        }
+        buf.clear();
+    }
+    Ok(None)
 }

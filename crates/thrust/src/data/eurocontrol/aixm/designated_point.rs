@@ -7,15 +7,30 @@ use std::io::BufReader;
 use std::path::Path;
 use zip::read::ZipArchive;
 
+use crate::data::eurocontrol::aixm::Node;
+
 use super::{find_node, read_text};
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+/**
+ * A designated point as defined in AIXM.
+ *
+ * These are waypoints that are not navaids.
+ */
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DesignatedPoint {
+    #[serde(skip)]
     pub identifier: String,
+    /// Latitude in decimal degrees
     pub latitude: f64,
+    /// Longitude in decimal degrees
     pub longitude: f64,
+    #[serde(rename = "name")]
+    /// Name of the designated point
     pub designator: String,
+    #[serde(skip)]
     pub name: Option<String>,
+    #[serde(skip)]
+    /// Type of designated point (TODO: enum?)
     pub r#type: String,
 }
 
@@ -57,22 +72,24 @@ fn parse_designated_point<R: std::io::BufRead>(
         ],
         Some(QName(b"aixm:DesignatedPoint")),
     ) {
-        match node {
+        let Node { name, .. } = node;
+        match name {
             QName(b"gml:identifier") => {
-                point.identifier = read_text(reader, node)?;
+                point.identifier = read_text(reader, name)?;
             }
             QName(b"aixm:name") => {
-                point.name = Some(read_text(reader, node)?);
+                point.name = Some(read_text(reader, name)?);
             }
             QName(b"aixm:designator") => {
-                point.designator = read_text(reader, node)?;
+                point.designator = read_text(reader, name)?;
             }
             QName(b"aixm:type") => {
-                point.r#type = read_text(reader, node)?;
+                point.r#type = read_text(reader, name)?;
             }
             QName(b"aixm:Point") => {
-                while let Ok(node) = find_node(reader, vec![QName(b"gml:pos")], Some(node)) {
-                    let coords: Vec<f64> = read_text(reader, node)?
+                while let Ok(node) = find_node(reader, vec![QName(b"gml:pos")], Some(name)) {
+                    let Node { name, .. } = node;
+                    let coords: Vec<f64> = read_text(reader, name)?
                         .split_whitespace()
                         .map(|s| s.parse().unwrap())
                         .collect();

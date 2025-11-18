@@ -1,5 +1,5 @@
 use polars::prelude::*;
-use std::{env, path::Path};
+use std::{collections::HashMap, env, path::Path};
 use thrust::data::eurocontrol::aixm::designated_point::parse_designated_point_zip_file;
 
 fn main() {
@@ -12,14 +12,14 @@ fn main() {
     let path = path.join("DesignatedPoint.BASELINE.zip");
 
     match parse_designated_point_zip_file(path) {
-        Ok(point) => {
+        Ok(points) => {
             if let Ok(df) = df!(
-                "identifier" => point.values().map(|point| point.identifier.clone()).collect::<Vec<_>>(),
-                "designator" => point.values().map(|point| point.designator.clone()).collect::<Vec<_>>(),
-                "name" => point.values().map(|point| point.name.clone()).collect::<Vec<_>>(),
-                "latitude" => point.values().map(|point| point.latitude).collect::<Vec<_>>(),
-                "longitude" => point.values().map(|point| point.longitude).collect::<Vec<_>>(),
-                "type" => point.values().map(|point| point.r#type.clone()).collect::<Vec<_>>(),
+                "identifier" => points.values().map(|point| point.identifier.clone()).collect::<Vec<_>>(),
+                "designator" => points.values().map(|point| point.designator.clone()).collect::<Vec<_>>(),
+                "name" => points.values().map(|point| point.name.clone()).collect::<Vec<_>>(),
+                "latitude" => points.values().map(|point| point.latitude).collect::<Vec<_>>(),
+                "longitude" => points.values().map(|point| point.longitude).collect::<Vec<_>>(),
+                "type" => points.values().map(|point| point.r#type.clone()).collect::<Vec<_>>(),
             ) {
                 println!("{df:?}");
             }

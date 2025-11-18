@@ -9,6 +9,44 @@
 //! - Connectors: ATS routes, SID, STAR, DCT, VFR/IFR, OAT/GAT
 //! - Modifiers: Speed and Level changes
 //!
+//! The parser tokenizes the input string, identifies each token type,
+//! and constructs a structured representation using Rust enums and structs.
+//!
+//! # Acknowledgement
+//!
+//! This parser is inspired by and adapted from the Python implementation
+//! available at <https://github.com/pventon/ICAO-F15-Parser/>
+//!
+//! ## Example
+//!
+//! The following field 15 entry:
+//!
+//! `N0490F360 ELCOB6B ELCOB UT300 SENLO UN502 JSY DCT LIZAD DCT MOPAT DCT LUNIG DCT MOMIN DCT PIKIL/M084F380 NATD HOIST/N0490F380 N756C ANATI/N0441F340 DCT MIVAX DCT OBTEK DCT XORLO ROCKT2`
+//!
+//! becomes a structured sequence which serializes to JSON as follows:
+//!
+//!   ```json
+//!   [
+//!     {"speed": {"kts": 490}, "altitude": {"FL": 360}},
+//!     {"SID": "ELCOB6B"},
+//!     {"waypoint": "ELCOB"},
+//!     {"airway": "UT300"},
+//!     {"waypoint": "SENLO"},
+//!     {"airway": "UN502"},
+//!     {"waypoint": "JSY"},
+//!     "DCT",
+//!     {"waypoint": "LIZAD"},
+//!     // (truncated)
+//!     {"waypoint": "PIKIL"},
+//!     {"speed": {"Mach": 0.84}, "altitude": {"FL": 380}},
+//!     {"NAT": "NATD"},
+//!     {"waypoint": "HOIST"},
+//!     // (truncated)
+//!     {"waypoint": "XORLO"},
+//!     {"STAR": "ROCKT2"}
+//!   ]
+//!   ```
+//!
 //! ## Usage
 //!
 //! ```rust
@@ -20,6 +58,7 @@
 //!     Err(e) => eprintln!("JSON serialization error: {}", e),
 //! }
 //! ```
+//!
 
 use serde::{Deserialize, Serialize};
 use std::fmt;

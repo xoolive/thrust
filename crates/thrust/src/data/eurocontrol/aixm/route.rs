@@ -7,19 +7,41 @@ use std::io::BufReader;
 use std::path::Path;
 use zip::read::ZipArchive;
 
+use crate::data::eurocontrol::aixm::Node;
+
 use super::{find_node, read_text};
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+/**
+ * A route as defined in AIXM.
+ *
+ * A route name consists of a prefix (optional), a second letter, a number, and
+ * a multiple identifier (optional).
+ *
+ * For example, "UN123" has:
+ *   prefix: "U", second_letter: "N", number: "123", multiple_identifier: None
+ *
+ * Another example, "N456B" has:
+ *   prefix: None, second_letter: "N", number: "456", multiple_identifier: "B"
+ *
+ */
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Route {
+    #[serde(skip)]
     pub identifier: String,
+    /// The prefix of the route, if any (must be "U" if any)
     pub prefix: Option<String>,
+    /// The second letter of the route
     pub second_letter: Option<String>,
+    /// The number of the route
     pub number: Option<String>,
+    /// The multiple identifier of the route, if any
     pub multiple_identifier: Option<String>,
-    pub begin_position: Option<String>,
-    pub end_position: Option<String>,
 }
 
+/**
+ * Parse route data from a ZIP file containing AIXM data.
+ */
 pub fn parse_route_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Route>, Box<dyn std::error::Error>> {
     let file = File::open(path)?;
     let mut archive = ZipArchive::new(file)?;
@@ -51,32 +73,25 @@ fn parse_route<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Route, Box
             QName(b"aixm:designatorSecondLetter"),
             QName(b"aixm:designatorNumber"),
             QName(b"aixm:multipleIdentifier"),
-            QName(b"gml:beginPosition"),
-            QName(b"gml:endPosition"),
         ],
         Some(QName(b"aixm:Route")),
     ) {
-        match node {
+        let Node { name, .. } = node;
+        match name {
             QName(b"gml:identifier") => {
-                route.identifier = read_text(reader, node)?;
+                route.identifier = read_text(reader, name)?;
             }
             QName(b"aixm:designatorPrefix") => {
-                route.prefix = Some(read_text(reader, node)?);
+                route.prefix = Some(read_text(reader, name)?);
             }
             QName(b"aixm:designatorSecondLetter") => {
-                route.second_letter = Some(read_text(reader, node)?);
+                route.second_letter = Some(read_text(reader, name)?);
             }
             QName(b"aixm:designatorNumber") => {
-                route.number = Some(read_text(reader, node)?);
+                route.number = Some(read_text(reader, name)?);
             }
             QName(b"aixm:multipleIdentifier") => {
-                route.multiple_identifier = Some(read_text(reader, node)?);
-            }
-            QName(b"gml:beginPosition") => {
-                route.begin_position = Some(read_text(reader, node)?);
-            }
-            QName(b"gml:endPosition") => {
-                route.end_position = Some(read_text(reader, node)?);
+                route.multiple_identifier = Some(read_text(reader, name)?);
             }
             _ => (),
         }
