@@ -1,16 +1,16 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from numbers import Real
+from typing import Any, Union
 
-from pyopensky.time import (
-    deltalike,
-    time_or_delta,
-    timelike,
-    timetuple,
-    to_timedelta,
-)
+import pandas as pd  # type: ignore[import]
 
-import pandas as pd
+timelike = Union[str, Real, datetime, pd.Timestamp]
+deltalike = Union[None, str, Real, timedelta, pd.Timedelta]
+
+time_or_delta = Union[timelike, timedelta]
+timetuple = tuple[datetime, datetime, datetime, datetime]
+
 
 __all__ = [
     "deltalike",
@@ -54,3 +54,13 @@ def to_datetime(time: timelike) -> datetime:
             "datetime (resp. pd.Timestamp) constructor."
         )
     return time  # type: ignore
+
+
+def to_timedelta(delta: deltalike, **kwargs: Any) -> pd.Timedelta:
+    if isinstance(delta, Real):
+        delta = pd.Timedelta(seconds=float(delta))
+    elif isinstance(delta, (str, timedelta)):
+        delta = pd.Timedelta(delta)
+    elif delta is None:
+        delta = pd.Timedelta(**kwargs)
+    return delta
