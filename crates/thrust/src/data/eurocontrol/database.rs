@@ -92,8 +92,10 @@ impl std::fmt::Display for ResolvedPoint {
         match self {
             ResolvedPoint::Navaid(navaid) => write!(
                 f,
-                "Navaid({:#?}: {:.3},{:.3})",
-                navaid.name, navaid.latitude, navaid.longitude
+                "Navaid({}: {:.3},{:.3})",
+                navaid.name.as_ref().unwrap(),
+                navaid.latitude,
+                navaid.longitude
             ),
             ResolvedPoint::DesignatedPoint(dp) => write!(
                 f,
@@ -111,9 +113,9 @@ impl std::fmt::Display for ResolvedPoint {
 impl From<&ResolvedPoint> for Coor2D {
     fn from(val: &ResolvedPoint) -> Self {
         match val {
-            ResolvedPoint::Navaid(navaid) => Coor2D::raw(navaid.latitude, navaid.longitude),
-            ResolvedPoint::DesignatedPoint(dp) => Coor2D::raw(dp.latitude, dp.longitude),
-            ResolvedPoint::Coordinates { latitude, longitude } => Coor2D::raw(*latitude, *longitude),
+            ResolvedPoint::Navaid(navaid) => Coor2D::geo(navaid.latitude, navaid.longitude),
+            ResolvedPoint::DesignatedPoint(dp) => Coor2D::geo(dp.latitude, dp.longitude),
+            ResolvedPoint::Coordinates { latitude, longitude } => Coor2D::geo(*latitude, *longitude),
             ResolvedPoint::None => Coor2D::default(),
         }
     }
@@ -527,7 +529,7 @@ impl AirwayDatabase {
                 if points.len() > 1 {
                     // Find the next definitive point ahead
                     let mut next_definitive: Option<&ResolvedPoint> = None;
-                    for candidate in resolved.iter() {
+                    for candidate in resolved[i..].iter() {
                         match candidate {
                             EnrichedCandidates::Point((pts, _, _)) if pts.len() == 1 => {
                                 next_definitive = pts.first();
@@ -547,6 +549,7 @@ impl AirwayDatabase {
                         let mut best_score = f64::INFINITY;
 
                         for (idx, candidate) in points.iter().enumerate() {
+                            tracing::info!("Scoring candidate {}: {} ({}-{})", idx, candidate, a, b);
                             let score = score_hybrid(&a.into(), &b.into(), &candidate.into());
                             if score < best_score {
                                 best_score = score;
@@ -573,9 +576,6 @@ impl AirwayDatabase {
                 last_known = Some(pt.clone());
             }
         }
-
-        // 7. Build the final sequence of resolved route segments.
-        // ...existing code...
 
         // 7. Build the final sequence of resolved route segments.
         let mut segments = Vec::new();
@@ -648,6 +648,14 @@ fn score_hybrid(a: &Coor2D, b: &Coor2D, x: &Coor2D) -> f64 {
     let delta_b = (xb[0] - ab[0]).abs().min(360.0 - (xb[0] - ab[0]).abs());
     let bearing_diff = (delta_a + delta_b) / 2.0; // Normalize to [0,1]
 
+    tracing::info!(
+        "Scoring point: {} = {} + {}; bearing_diff = {:.3}, gap_ratio = {:.3}",
+        ab[2],
+        ax[2],
+        xb[2],
+        bearing_diff,
+        gap_ratio
+    );
     // Combine the two metrics into a score
     bearing_diff / 180. + (gap_ratio - 1.0).max(0.)
 }
