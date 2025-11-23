@@ -459,11 +459,14 @@ impl AirwayDatabase {
         for i in 1..resolved.len() - 1 {
             let (before_i, i_and_after) = &mut resolved.split_at_mut(i);
             if let (EnrichedCandidates::Airway((routes, _, _, _)), after_i) = i_and_after.split_first_mut().unwrap() {
+                tracing::debug!("Filtering airway candidates: {:?}", routes);
                 if let Some(EnrichedCandidates::Point((points, _, _))) = before_i.last() {
                     routes.retain(|r| points.iter().any(|p| r.contains(p)));
+                    tracing::debug!("Filtering airway candidates with point {:?}: {:?}", points, routes);
                 }
                 if let Some(EnrichedCandidates::Point((points, _, _))) = after_i.first() {
                     routes.retain(|r| points.iter().any(|p| r.contains(p)));
+                    tracing::debug!("Filtering airway candidates with point {:?}: {:?}", points, routes);
                 }
             }
         }
@@ -471,22 +474,25 @@ impl AirwayDatabase {
         // 2. Transform now empty airway candidates to Direct
         for candidate in resolved.iter_mut() {
             if let EnrichedCandidates::Airway((routes, name, _, _)) = candidate {
-                tracing::warn!("No valid airway remaining for '{}'", name);
                 if routes.is_empty() {
+                    tracing::warn!("No valid airway remaining for '{}'", name);
                     *candidate = EnrichedCandidates::Direct();
                 }
             }
         }
 
         // 3. For each point, retain only those that are present in the adjacent airway segments.
-        for i in 1..resolved.len() - 1 {
+        for i in 0..resolved.len() {
             let (before_i, i_and_after) = &mut resolved.split_at_mut(i);
             if let (EnrichedCandidates::Point((points, _, _)), after_i) = i_and_after.split_first_mut().unwrap() {
+                tracing::debug!("Filtering point candidates: {:?}", points);
                 if let Some(EnrichedCandidates::Airway((routes, _, _, _))) = before_i.last() {
                     points.retain(|p| routes.iter().any(|r| r.contains(p)));
+                    tracing::debug!("Filtering point candidates with airway {:?}: {:?}", routes, points);
                 }
                 if let Some(EnrichedCandidates::Airway((routes, _, _, _))) = after_i.first() {
                     points.retain(|p| routes.iter().any(|r| r.contains(p)));
+                    tracing::debug!("Filtering point candidates with airway {:?}: {:?}", routes, points);
                 }
             }
         }
@@ -502,6 +508,13 @@ impl AirwayDatabase {
                                 for route in routes.iter_mut() {
                                     if let Some(trimmed) = route.between(before, after) {
                                         *route = trimmed;
+                                        tracing::debug!(
+                                            "Trimmed airway '{}' between points {} and {}: {:?}",
+                                            route.name,
+                                            before,
+                                            after,
+                                            *route
+                                        );
                                     }
                                 }
                             }
@@ -543,25 +556,57 @@ impl AirwayDatabase {
                         }
                     }
 
-                    // Score all candidates if we have both reference points
-                    if let (Some(a), Some(b)) = (&last_known, next_definitive) {
-                        let mut best_idx = 0;
-                        let mut best_score = f64::INFINITY;
+                    match (&last_known, next_definitive) {
+                        (None, None) => {
+                            tracing::warn!("Cannot disambiguate point {:?}: no reference points available", points);
+                        }
+                        (None, Some(_)) => {
+                            tracing::info!("Disambiguating point {:?} using only next definitive point", points);
+                        }
+                        (Some(a), None) => {
+                            tracing::info!("Disambiguating point {:?} using only last known point", points);
 
-                        for (idx, candidate) in points.iter().enumerate() {
-                            tracing::info!("Scoring candidate {}: {} ({}-{})", idx, candidate, a, b);
-                            let score = score_hybrid(&a.into(), &b.into(), &candidate.into());
-                            if score < best_score {
-                                best_score = score;
-                                best_idx = idx;
+                            // Only last known point is available, pick the closest candidate
+                            let mut best_idx = 0;
+                            let mut best_distance = f64::INFINITY;
+
+                            for (idx, candidate) in points.iter().enumerate() {
+                                let distance =
+                                    WGS84.distance(&Into::<Coor2D>::into(a), &Into::<Coor2D>::into(candidate));
+                                if distance < best_distance {
+                                    best_distance = distance;
+                                    best_idx = idx;
+                                }
+                            }
+
+                            // Keep only the best candidate
+                            if let EnrichedCandidates::Point((points, _, _)) = &mut resolved[i] {
+                                let best = points[best_idx].clone();
+                                points.clear();
+                                points.push(best);
                             }
                         }
+                        (Some(a), Some(b)) => {
+                            tracing::info!("Disambiguating point {:?} using both reference points", points);
 
-                        // Keep only the best candidate
-                        if let EnrichedCandidates::Point((points, _, _)) = &mut resolved[i] {
-                            let best = points[best_idx].clone();
-                            points.clear();
-                            points.push(best);
+                            let mut best_idx = 0;
+                            let mut best_score = f64::INFINITY;
+
+                            for (idx, candidate) in points.iter().enumerate() {
+                                tracing::info!("Scoring candidate {}: {} ({}-{})", idx, candidate, a, b);
+                                let score = score_hybrid(&a.into(), &b.into(), &candidate.into());
+                                if score < best_score {
+                                    best_score = score;
+                                    best_idx = idx;
+                                }
+                            }
+
+                            // Keep only the best candidate
+                            if let EnrichedCandidates::Point((points, _, _)) = &mut resolved[i] {
+                                let best = points[best_idx].clone();
+                                points.clear();
+                                points.push(best);
+                            }
                         }
                     }
                 }
