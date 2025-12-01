@@ -37,7 +37,7 @@ jobs:
           # - runner: ubuntu-22.04
           #   target: ppc64le
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: 3.x
@@ -73,7 +73,7 @@ jobs:
           - runner: ubuntu-22.04
             target: armv7
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: 3.x
@@ -103,7 +103,7 @@ jobs:
             target: x86
             triplet: x86-windows-static
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       # - uses: actions/cache@v4
       #   with:
       #     path: ./vcpkg
@@ -146,7 +146,7 @@ jobs:
           - runner: macos-14
             target: aarch64
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: 3.x
@@ -166,7 +166,7 @@ jobs:
   sdist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
