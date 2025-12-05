@@ -7,32 +7,20 @@ authors.workspace = true
 version.workspace = true
 license.workspace = true
 edition.workspace = true
-exclude = [
-    "__pycache__",
-    "**/__pycache__",
-    "**/__pycache__/**",
-    "*.pyc",
-    "**/*.pyc",
-]
+exclude = ["__pycache__", "**/__pycache__", "**/__pycache__/**", "*.pyc", "**/*.pyc"]
 
 [features]
 default = []
-
-# ndarray-linalg backends
-openblas = ["traffic-thrust/openblas"]
-netlib = ["traffic-thrust/netlib"]
 
 [lib]
 name = "thrust_py"
 crate-type = ["cdylib"]
 
 [dependencies]
-numpy = "0.27.0"
-polars = { version = "0.51.0", features = ["lazy", "rolling_window"] }
+numpy = "0.27.1"
+polars = { version = "0.52.0", features = ["lazy", "timezones", "rolling_window"] }
 pyo3 = "0.27.2"
-traffic-thrust = { version = "0.1.0", path = "../crates/thrust", features = [
-    "polars",
-] }
+traffic-thrust = { version = "0.1.0", path = "../crates/thrust", features = ["polars"] }
 
 [dev-dependencies]
 chrono = "0.4.38"
