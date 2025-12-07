@@ -1,13 +1,17 @@
+/*
 use ::thrust::kalman::kalman6d;
 use numpy::{PyArray2, PyArray3};
+use polars::prelude::PyDataFrame;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use pyo3_polars::PyDataFrame;
 
 #[pyfunction]
 fn kalman6d_rs(py: Python, pydf: PyDataFrame) -> PyResult<Bound<PyDict>> {
-    kalman6d(pydf.into())
+    // Convert PyDataFrame to native DataFrame
+    let df = pydf.into();
+    // Pass df to your Rust logic (e.g., kalman6d)
+    kalman6d(df)
         .map(|(x_pre, x_cor, p_pre, p_cor)| {
             let wrapped_res = PyDict::new(py);
             wrapped_res
@@ -34,3 +38,4 @@ pub fn init(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
 
     Ok(m)
 }
+*/

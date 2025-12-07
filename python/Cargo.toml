@@ -11,6 +11,8 @@ exclude = ["__pycache__", "**/__pycache__", "**/__pycache__/**", "*.pyc", "**/*.
 
 [features]
 default = []
+# for now the pyo3 polars does not work, let's wait and see with next versions
+polars = []
 
 [lib]
 name = "thrust_py"

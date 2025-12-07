@@ -3,7 +3,7 @@
 use pyo3::prelude::*;
 
 pub mod intervals;
-#[cfg(any(feature = "openblas", feature = "netlib"))]
+#[cfg(feature = "polars")]
 pub mod kalman;
 
 #[pymodule]
@@ -19,7 +19,7 @@ fn thrust(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     let modules = sys.getattr("modules")?;
     modules.set_item("thrust.core.intervals", &interval_mod)?;
 
-    #[cfg(any(feature = "openblas", feature = "netlib"))]
+    #[cfg(feature = "polars")]
     {
         let kalman_mod = kalman::init(py)?;
         m.add_submodule(&kalman_mod)?;
