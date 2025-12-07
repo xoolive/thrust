@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load the database once at startup
     println!("Loading database...");
-    let database = AirwayDatabase::new(&path)?;
+    let database = AirwayDatabase::new(path)?;
     println!("Database loaded successfully!");
 
     // Create shared state
