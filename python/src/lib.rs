@@ -21,8 +21,8 @@ fn thrust(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     #[cfg(feature = "polars")]
     {
-        let kalman_mod = kalman::init(py)?;
-        m.add_submodule(&kalman_mod)?;
+        /*let kalman_mod = kalman::init(py)?;
+        m.add_submodule(&kalman_mod)?;*/
     }
 
     Ok(())
