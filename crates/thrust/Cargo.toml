@@ -29,7 +29,7 @@ polars = ["dep:polars", "dep:ndarray-linalg", "dep:numpy"]
 rest = ["dep:warp", "dep:tokio", "dep:tracing-subscriber"]
 
 [dev-dependencies]
-jiff = "0.2.17"
+jiff = "0.2.18"
 
 [[example]]
 name = "airport_heliport"
