@@ -40,6 +40,7 @@ pub struct RouteSegment {
 pub enum PointReference {
     DesignatedPoint(String),
     Navaid(String),
+    AirportHeliport(String),
     #[default]
     None,
 }
@@ -49,8 +50,13 @@ impl PointReference {
         match self {
             PointReference::DesignatedPoint(id) => id.to_string(),
             PointReference::Navaid(id) => id.to_string(),
+            PointReference::AirportHeliport(id) => id.to_string(),
             PointReference::None => "".to_string(),
         }
+    }
+
+    pub fn is_airport_heliport(&self) -> bool {
+        matches!(self, PointReference::AirportHeliport(_))
     }
 }
 

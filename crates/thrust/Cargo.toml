@@ -52,5 +52,13 @@ name = "route_segment"
 required-features = ["polars"]
 
 [[example]]
+name = "standard_instrument_arrival"
+required-features = ["polars"]
+
+[[example]]
+name = "standard_instrument_departure"
+required-features = ["polars"]
+
+[[example]]
 name = "field15_serve"
 required-features = ["rest"]

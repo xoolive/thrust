@@ -12,10 +12,15 @@ use serde::Serialize;
 use crate::data::field15::{Connector, Field15Element, Modifier, Point};
 use crate::data::{
     eurocontrol::aixm::{
+        airport_heliport::{parse_airport_heliport_zip_file, AirportHeliport},
+        arrival_leg::{parse_arrival_leg_zip_file, ArrivalLeg},
+        departure_leg::{parse_departure_leg_zip_file, DepartureLeg},
         designated_point::{parse_designated_point_zip_file, DesignatedPoint},
         navaid::{parse_navaid_zip_file, Navaid},
         route::{parse_route_zip_file, Route},
         route_segment::{parse_route_segment_zip_file, PointReference, RouteSegment},
+        standard_instrument_arrival::{parse_standard_instrument_arrival_zip_file, StandardInstrumentArrival},
+        standard_instrument_departure::{parse_standard_instrument_departure_zip_file, StandardInstrumentDeparture},
     },
     field15::{Altitude, Speed},
 };
@@ -24,22 +29,346 @@ use crate::data::{
  * An airway database containing navaids, designated points, route segments, and routes.
  */
 pub struct AirwayDatabase {
+    airports: HashMap<String, AirportHeliport>,
     navaids: HashMap<String, Navaid>,
     designated_points: HashMap<String, DesignatedPoint>,
     route_segments: HashMap<String, RouteSegment>,
     routes: HashMap<String, Route>,
+    arrival_legs: HashMap<String, ArrivalLeg>,
+    departure_legs: HashMap<String, DepartureLeg>,
+    standard_instrument_arrivals: HashMap<String, StandardInstrumentArrival>,
+    standard_instrument_departures: HashMap<String, StandardInstrumentDeparture>,
 }
 
 impl AirwayDatabase {
     /// Load the airway database from the specified directory path.
     pub fn new(path: &path::Path) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(AirwayDatabase {
+            airports: parse_airport_heliport_zip_file(path.join("AirportHeliport.BASELINE.zip"))?,
             navaids: parse_navaid_zip_file(path.join("Navaid.BASELINE.zip"))?,
             designated_points: parse_designated_point_zip_file(path.join("DesignatedPoint.BASELINE.zip"))?,
             route_segments: parse_route_segment_zip_file(path.join("RouteSegment.BASELINE.zip"))?,
             routes: parse_route_zip_file(path.join("Route.BASELINE.zip"))?,
+            arrival_legs: if path.join("ArrivalLeg.BASELINE.zip").exists() {
+                parse_arrival_leg_zip_file(path.join("ArrivalLeg.BASELINE.zip"))?
+            } else {
+                HashMap::new()
+            },
+            departure_legs: if path.join("DepartureLeg.BASELINE.zip").exists() {
+                parse_departure_leg_zip_file(path.join("DepartureLeg.BASELINE.zip"))?
+            } else {
+                HashMap::new()
+            },
+            standard_instrument_arrivals: if path.join("StandardInstrumentArrival.BASELINE.zip").exists() {
+                parse_standard_instrument_arrival_zip_file(path.join("StandardInstrumentArrival.BASELINE.zip"))?
+            } else {
+                HashMap::new()
+            },
+            standard_instrument_departures: if path.join("StandardInstrumentDeparture.BASELINE.zip").exists() {
+                parse_standard_instrument_departure_zip_file(path.join("StandardInstrumentDeparture.BASELINE.zip"))?
+            } else {
+                HashMap::new()
+            },
         })
     }
+
+    /// Resolve SID connecting points by procedure designator.
+    pub fn resolve_sid_points(&self, name: &str) -> Vec<ResolvedPoint> {
+        let sid_ids = self
+            .standard_instrument_departures
+            .values()
+            .filter(|sid| sid.designator.trim().eq_ignore_ascii_case(name))
+            .map(|sid| sid.identifier.clone())
+            .collect::<std::collections::HashSet<_>>();
+
+        let fallback_points = self
+            .standard_instrument_departures
+            .values()
+            .filter(|sid| sid.designator.trim().eq_ignore_ascii_case(name))
+            .flat_map(|sid| sid.connecting_points.iter().cloned())
+            .collect::<Vec<_>>();
+
+        let exit_points = self.procedure_exit_points(&sid_ids, true);
+        let points_to_resolve = if exit_points.is_empty() {
+            fallback_points
+        } else {
+            exit_points
+        };
+
+        let mut points = points_to_resolve
+            .iter()
+            .map(|p| ResolvedPoint::from_db(p, self))
+            .filter(|p| !matches!(p, ResolvedPoint::None))
+            .collect::<Vec<_>>();
+        points.sort_by_key(|p| format!("{p:?}"));
+        points.dedup();
+        points
+    }
+
+    /// Resolve STAR connecting points by procedure designator.
+    pub fn resolve_star_points(&self, name: &str) -> Vec<ResolvedPoint> {
+        let star_ids = self
+            .standard_instrument_arrivals
+            .values()
+            .filter(|star| star.designator.trim().eq_ignore_ascii_case(name))
+            .map(|star| star.identifier.clone())
+            .collect::<std::collections::HashSet<_>>();
+
+        let fallback_points = self
+            .standard_instrument_arrivals
+            .values()
+            .filter(|star| star.designator.trim().eq_ignore_ascii_case(name))
+            .flat_map(|star| star.connecting_points.iter().cloned())
+            .collect::<Vec<_>>();
+
+        let entry_points = self.procedure_entry_points(&star_ids, false);
+        let points_to_resolve = if entry_points.is_empty() {
+            fallback_points
+        } else {
+            entry_points
+        };
+
+        let mut points = points_to_resolve
+            .iter()
+            .map(|p| ResolvedPoint::from_db(p, self))
+            .filter(|p| !matches!(p, ResolvedPoint::None))
+            .collect::<Vec<_>>();
+        points.sort_by_key(|p| format!("{p:?}"));
+        points.dedup();
+        points
+    }
+
+    /// Resolve SID procedures by designator as route-like segments.
+    pub fn resolve_sid_routes(&self, name: &str) -> Vec<ResolvedRoute> {
+        self.standard_instrument_departures
+            .values()
+            .filter(|sid| sid.designator.trim().eq_ignore_ascii_case(name))
+            .map(|sid| {
+                let segments = self
+                    .departure_legs
+                    .values()
+                    .filter(|leg| leg.departure.as_ref().is_some_and(|id| id == &sid.identifier))
+                    .filter_map(|leg| {
+                        let start = ResolvedPoint::from_db(&leg.start, self);
+                        let end = ResolvedPoint::from_db(&leg.end, self);
+                        if matches!(start, ResolvedPoint::None) || matches!(end, ResolvedPoint::None) {
+                            None
+                        } else {
+                            Some(ResolvedRouteSegment {
+                                start,
+                                end,
+                                name: Some(sid.designator.clone()),
+                                altitude: None,
+                                speed: None,
+                            })
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                ResolvedRoute {
+                    segments: order_route_segments(segments),
+                    name: sid.designator.clone(),
+                }
+            })
+            .collect()
+    }
+
+    /// Resolve STAR procedures by designator as route-like segments.
+    pub fn resolve_star_routes(&self, name: &str) -> Vec<ResolvedRoute> {
+        self.standard_instrument_arrivals
+            .values()
+            .filter(|star| star.designator.trim().eq_ignore_ascii_case(name))
+            .map(|star| {
+                let segments = self
+                    .arrival_legs
+                    .values()
+                    .filter(|leg| leg.arrival.as_ref().is_some_and(|id| id == &star.identifier))
+                    .filter_map(|leg| {
+                        let start = ResolvedPoint::from_db(&leg.start, self);
+                        let end = ResolvedPoint::from_db(&leg.end, self);
+                        if matches!(start, ResolvedPoint::None) || matches!(end, ResolvedPoint::None) {
+                            None
+                        } else {
+                            Some(ResolvedRouteSegment {
+                                start,
+                                end,
+                                name: Some(star.designator.clone()),
+                                altitude: None,
+                                speed: None,
+                            })
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                ResolvedRoute {
+                    segments: order_route_segments(segments),
+                    name: star.designator.clone(),
+                }
+            })
+            .collect()
+    }
+
+    fn procedure_exit_points(
+        &self,
+        procedure_ids: &std::collections::HashSet<String>,
+        is_departure: bool,
+    ) -> Vec<PointReference> {
+        let legs: Vec<(PointReference, PointReference)> = if is_departure {
+            self.departure_legs
+                .values()
+                .filter(|leg| leg.departure.as_ref().is_some_and(|id| procedure_ids.contains(id)))
+                .map(|leg| (leg.start.clone(), leg.end.clone()))
+                .collect()
+        } else {
+            self.arrival_legs
+                .values()
+                .filter(|leg| leg.arrival.as_ref().is_some_and(|id| procedure_ids.contains(id)))
+                .map(|leg| (leg.start.clone(), leg.end.clone()))
+                .collect()
+        };
+
+        let mut indegree: HashMap<String, usize> = HashMap::new();
+        let mut outdegree: HashMap<String, usize> = HashMap::new();
+        let mut refs: HashMap<String, PointReference> = HashMap::new();
+
+        for (start, end) in &legs {
+            let s = start.name();
+            let e = end.name();
+
+            if !s.is_empty() {
+                refs.insert(s.clone(), start.clone());
+                outdegree.entry(s).and_modify(|v| *v += 1).or_insert(1);
+            }
+            if !e.is_empty() {
+                refs.insert(e.clone(), end.clone());
+                indegree.entry(e).and_modify(|v| *v += 1).or_insert(1);
+            }
+        }
+
+        refs.into_iter()
+            .filter_map(|(name, point_ref)| {
+                if point_ref.is_airport_heliport() {
+                    return None;
+                }
+                let in_d = *indegree.get(&name).unwrap_or(&0);
+                let out_d = *outdegree.get(&name).unwrap_or(&0);
+                if out_d == 0 && in_d > 0 {
+                    Some(point_ref)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    fn procedure_entry_points(
+        &self,
+        procedure_ids: &std::collections::HashSet<String>,
+        is_departure: bool,
+    ) -> Vec<PointReference> {
+        let legs: Vec<(PointReference, PointReference)> = if is_departure {
+            self.departure_legs
+                .values()
+                .filter(|leg| leg.departure.as_ref().is_some_and(|id| procedure_ids.contains(id)))
+                .map(|leg| (leg.start.clone(), leg.end.clone()))
+                .collect()
+        } else {
+            self.arrival_legs
+                .values()
+                .filter(|leg| leg.arrival.as_ref().is_some_and(|id| procedure_ids.contains(id)))
+                .map(|leg| (leg.start.clone(), leg.end.clone()))
+                .collect()
+        };
+
+        let mut indegree: HashMap<String, usize> = HashMap::new();
+        let mut outdegree: HashMap<String, usize> = HashMap::new();
+        let mut refs: HashMap<String, PointReference> = HashMap::new();
+
+        for (start, end) in &legs {
+            let s = start.name();
+            let e = end.name();
+
+            if !s.is_empty() {
+                refs.insert(s.clone(), start.clone());
+                outdegree.entry(s).and_modify(|v| *v += 1).or_insert(1);
+            }
+            if !e.is_empty() {
+                refs.insert(e.clone(), end.clone());
+                indegree.entry(e).and_modify(|v| *v += 1).or_insert(1);
+            }
+        }
+
+        refs.into_iter()
+            .filter_map(|(name, point_ref)| {
+                if point_ref.is_airport_heliport() {
+                    return None;
+                }
+                let in_d = *indegree.get(&name).unwrap_or(&0);
+                let out_d = *outdegree.get(&name).unwrap_or(&0);
+                if in_d == 0 && out_d > 0 {
+                    Some(point_ref)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
+fn order_route_segments(segments: Vec<ResolvedRouteSegment>) -> Vec<ResolvedRouteSegment> {
+    let mut out_map: HashMap<ResolvedPoint, Vec<ResolvedRouteSegment>> = HashMap::new();
+    let mut indegree: HashMap<ResolvedPoint, usize> = HashMap::new();
+
+    for segment in segments {
+        out_map.entry(segment.start.clone()).or_default().push(segment.clone());
+        indegree.entry(segment.start.clone()).or_insert(0);
+        indegree.entry(segment.end.clone()).and_modify(|v| *v += 1).or_insert(1);
+    }
+
+    for edges in out_map.values_mut() {
+        edges.sort_by_key(|e| format!("{}", e.end));
+    }
+
+    let mut starts = indegree
+        .iter()
+        .filter_map(|(point, deg)| if *deg == 0 { Some(point.clone()) } else { None })
+        .collect::<Vec<_>>();
+    starts.sort_by_key(|p| format!("{p}"));
+
+    let mut ordered = Vec::new();
+
+    let walk_from = |start: ResolvedPoint,
+                     out_map: &mut HashMap<ResolvedPoint, Vec<ResolvedRouteSegment>>,
+                     ordered: &mut Vec<ResolvedRouteSegment>| {
+        let mut current = start;
+        loop {
+            let next = out_map
+                .get_mut(&current)
+                .and_then(|edges| if edges.is_empty() { None } else { Some(edges.remove(0)) });
+            if let Some(segment) = next {
+                current = segment.end.clone();
+                ordered.push(segment);
+            } else {
+                break;
+            }
+        }
+    };
+
+    for start in starts {
+        walk_from(start, &mut out_map, &mut ordered);
+    }
+
+    loop {
+        let mut keys = out_map
+            .iter()
+            .filter_map(|(k, v)| if v.is_empty() { None } else { Some(k.clone()) })
+            .collect::<Vec<_>>();
+        if keys.is_empty() {
+            break;
+        }
+        keys.sort_by_key(|p| format!("{p}"));
+        walk_from(keys.remove(0), &mut out_map, &mut ordered);
+    }
+
+    ordered
 }
 
 const VALID_ROUTE_PREFIXES: [&str; 32] = [
@@ -81,6 +410,7 @@ pub struct ResolvedRouteSegment {
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum ResolvedPoint {
+    AirportHeliport(AirportHeliport),
     Navaid(Navaid),
     DesignatedPoint(DesignatedPoint),
     Coordinates { latitude: f64, longitude: f64 },
@@ -90,6 +420,13 @@ pub enum ResolvedPoint {
 impl std::fmt::Display for ResolvedPoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            ResolvedPoint::AirportHeliport(airport) => {
+                write!(
+                    f,
+                    "AirportHeliport({}: {:.3},{:.3})",
+                    airport.icao, airport.latitude, airport.longitude
+                )
+            }
             ResolvedPoint::Navaid(navaid) => write!(
                 f,
                 "Navaid({}: {:.3},{:.3})",
@@ -113,6 +450,7 @@ impl std::fmt::Display for ResolvedPoint {
 impl From<&ResolvedPoint> for Coor2D {
     fn from(val: &ResolvedPoint) -> Self {
         match val {
+            ResolvedPoint::AirportHeliport(airport) => Coor2D::geo(airport.latitude, airport.longitude),
             ResolvedPoint::Navaid(navaid) => Coor2D::geo(navaid.latitude, navaid.longitude),
             ResolvedPoint::DesignatedPoint(dp) => Coor2D::geo(dp.latitude, dp.longitude),
             ResolvedPoint::Coordinates { latitude, longitude } => Coor2D::geo(*latitude, *longitude),
@@ -124,6 +462,7 @@ impl From<&ResolvedPoint> for Coor2D {
 impl PartialEq for ResolvedPoint {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
+            (ResolvedPoint::AirportHeliport(a), ResolvedPoint::AirportHeliport(b)) => a.identifier == b.identifier,
             (ResolvedPoint::Navaid(a), ResolvedPoint::Navaid(b)) => a.identifier == b.identifier,
             (ResolvedPoint::DesignatedPoint(a), ResolvedPoint::DesignatedPoint(b)) => a.identifier == b.identifier,
             (
@@ -148,6 +487,9 @@ impl Eq for ResolvedPoint {}
 impl Hash for ResolvedPoint {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
+            ResolvedPoint::AirportHeliport(airport) => {
+                airport.identifier.hash(state);
+            }
             ResolvedPoint::Navaid(navaid) => {
                 navaid.identifier.hash(state);
             }
@@ -169,6 +511,13 @@ impl ResolvedPoint {
     /// Resolve a point from the database.
     pub fn from_db(point: &PointReference, db: &AirwayDatabase) -> Self {
         match point {
+            PointReference::AirportHeliport(id) => {
+                if let Some(airport) = db.airports.get(id) {
+                    ResolvedPoint::AirportHeliport(airport.clone())
+                } else {
+                    ResolvedPoint::None
+                }
+            }
             PointReference::Navaid(id) => {
                 if let Some(navaid) = db.navaids.get(id) {
                     ResolvedPoint::Navaid(navaid.clone())
@@ -434,6 +783,34 @@ impl AirwayDatabase {
                     let lookup = ResolvedRoute::lookup(name, self);
                     if lookup.is_empty() {
                         tracing::warn!("No airway found for identifier '{}'", name);
+                        resolved.push(EnrichedCandidates::Direct());
+                    } else {
+                        resolved.push(EnrichedCandidates::Airway((
+                            lookup,
+                            name.to_string(),
+                            altitude.clone(),
+                            speed.clone(),
+                        )));
+                    }
+                }
+                Field15Element::Connector(Connector::Sid(name)) => {
+                    let lookup = self.resolve_sid_routes(name);
+                    if lookup.is_empty() {
+                        tracing::warn!("No SID found for identifier '{}'", name);
+                        resolved.push(EnrichedCandidates::Direct());
+                    } else {
+                        resolved.push(EnrichedCandidates::Airway((
+                            lookup,
+                            name.to_string(),
+                            altitude.clone(),
+                            speed.clone(),
+                        )));
+                    }
+                }
+                Field15Element::Connector(Connector::Star(name)) => {
+                    let lookup = self.resolve_star_routes(name);
+                    if lookup.is_empty() {
+                        tracing::warn!("No STAR found for identifier '{}'", name);
                         resolved.push(EnrichedCandidates::Direct());
                     } else {
                         resolved.push(EnrichedCandidates::Airway((

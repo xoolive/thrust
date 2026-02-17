@@ -1,7 +1,7 @@
 //! AIXM (Aeronautical Information Exchange Model) data parsers.
 //!
 //! This module provides parsers for various AIXM data types such as airports,
-//! heliports, designated points, navaids, routes, and route segments.
+//! heliports, designated points, navaids, routes, route segments, STARs, and SIDs.
 //!
 //! The parsers are provided under an open source license and can be used to read
 //! and process AIXM XML data files provided by EUROCONTROL B2B services under
@@ -12,10 +12,14 @@ use std::collections::HashMap;
 use quick_xml::{events::Event, name::QName, Reader};
 
 pub mod airport_heliport;
+pub mod arrival_leg;
+pub mod departure_leg;
 pub mod designated_point;
 pub mod navaid;
 pub mod route;
 pub mod route_segment;
+pub mod standard_instrument_arrival;
+pub mod standard_instrument_departure;
 
 struct Node<'a> {
     name: QName<'a>,

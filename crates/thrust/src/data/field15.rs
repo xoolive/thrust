@@ -501,23 +501,20 @@ impl Field15Parser {
             return None;
         }
 
-        // Determine speed length based on first character
-        // M (Mach) = 4 chars (M + 3 digits), N/K (Knots/KPH) = 5 chars (N/K + 4 digits)
-        let speed_len = if base_token.starts_with('M') { 4 } else { 5 };
+        // Try speed+altitude first with flexible speed lengths for N/K (3 or 4 digits)
+        let speed_lengths: &[usize] = if base_token.starts_with('M') { &[4] } else { &[5, 4] };
 
-        if base_token.len() < speed_len {
-            return None;
-        }
-
-        // Try to parse speed
-        let speed = Self::parse_speed(&base_token[..speed_len]);
-
-        // Parse altitude(s) from remaining characters
-        let (altitude, altitude_cruise_to) = if speed.is_some() && base_token.len() > speed_len {
-            let remaining = &base_token[speed_len..];
+        for speed_len in speed_lengths {
+            if base_token.len() < *speed_len {
+                continue;
+            }
+            let speed = Self::parse_speed(&base_token[..*speed_len]);
+            if speed.is_none() || base_token.len() <= *speed_len {
+                continue;
+            }
+            let remaining = &base_token[*speed_len..];
             // Check for two altitudes (cruise climb: speed/alt1/alt2)
-            if remaining.len() >= 7 {
-                // Try to parse two altitudes
+            let (altitude, altitude_cruise_to) = if remaining.len() >= 7 {
                 let first_alt_len = if remaining.starts_with('F') || remaining.starts_with('A') {
                     4
                 } else {
@@ -536,8 +533,20 @@ impl Field15Parser {
                 }
             } else {
                 (Self::parse_altitude(remaining), None)
+            };
+
+            if altitude.is_some() {
+                return Some(Modifier {
+                    speed,
+                    altitude,
+                    altitude_cruise_to,
+                    cruise_climb,
+                });
             }
-        } else if speed.is_none() && base_token.len() >= 3 {
+        }
+
+        // Fall back to altitude-only modifier
+        let (altitude, altitude_cruise_to) = if base_token.len() >= 3 {
             (Self::parse_altitude(base_token), None)
         } else {
             (None, None)
@@ -546,7 +555,7 @@ impl Field15Parser {
         // Only treat as modifier if altitude is present
         if altitude.is_some() {
             Some(Modifier {
-                speed,
+                speed: None,
                 altitude,
                 altitude_cruise_to,
                 cruise_climb,
@@ -566,12 +575,14 @@ impl Field15Parser {
         let value_str = &s[1..];
 
         match speed_type {
-            'N' if value_str.len() == 4 => value_str.parse::<u16>().ok().map(Speed::Knots),
+            'N' if value_str.len() == 4 || value_str.len() == 3 => value_str.parse::<u16>().ok().map(Speed::Knots),
             'M' if value_str.len() == 3 => {
                 // Mach is given as 3 digits, e.g., "079" => 0.79
                 value_str.parse::<u16>().ok().map(|v| Speed::Mach((v as f32) / 100.0))
             }
-            'K' if value_str.len() == 4 => value_str.parse::<u16>().ok().map(Speed::KilometersPerHour),
+            'K' if value_str.len() == 4 || value_str.len() == 3 => {
+                value_str.parse::<u16>().ok().map(Speed::KilometersPerHour)
+            }
             _ => None,
         }
     }

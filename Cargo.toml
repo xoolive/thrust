@@ -10,11 +10,11 @@ version = "0.1.0"
 authors = ["Xavier Olive <git@xoolive.org>"]
 
 [profile.release]
-lto = true
-strip = true
+lto = "thin"
 overflow-checks = true
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
 inherits = "release"
-lto = "thin"
+lto = true
+strip = true
