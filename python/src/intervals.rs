@@ -1,4 +1,4 @@
-use ::thrust::intervals::{Interval, IntervalCollection};
+use thrust::intervals::{Interval, IntervalCollection};
 
 use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::types::IntoPyDict;

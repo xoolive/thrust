@@ -2,6 +2,7 @@
 
 use pyo3::prelude::*;
 
+pub mod field15;
 pub mod intervals;
 #[cfg(feature = "polars")]
 pub mod kalman;
@@ -18,6 +19,10 @@ fn thrust(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sys = py.import("sys")?;
     let modules = sys.getattr("modules")?;
     modules.set_item("thrust.core.intervals", &interval_mod)?;
+
+    let field15_mod = field15::init(py)?;
+    m.add_submodule(&field15_mod)?;
+    modules.set_item("thrust.core.field15", &field15_mod)?;
 
     #[cfg(feature = "polars")]
     {
