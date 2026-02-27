@@ -1,0 +1,6 @@
+# Ensure wasm builds use JS-backed randomness for crates relying on
+# `getrandom` (directly or through dependencies such as `uuid`).
+# Without this cfg, `wasm32-unknown-unknown` builds can fail depending on
+# feature resolution in CI or local environments.
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg", "getrandom_backend=\"wasm_js\""]

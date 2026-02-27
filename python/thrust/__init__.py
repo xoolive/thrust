@@ -1,1 +1,9 @@
-from . import field15, intervals  # noqa: F401
+from . import (  # noqa: F401
+    airac,
+    airports,
+    airspaces,
+    airways,
+    field15,
+    intervals,
+    navpoints,
+)

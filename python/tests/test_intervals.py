@@ -1,9 +1,9 @@
-import pandas as pd  # type: ignore[import]
+import pandas as pd
 
 from thrust.intervals import Interval, IntervalCollection
 
 dates = pd.date_range(
-    "2022-03-21 11:10", "2022-03-21 11:20", freq="1T", tz="utc"
+    "2022-03-21 11:10", "2022-03-21 11:20", freq="1 min", tz="utc"
 )
 h0, h1, h2, h3, h4, h5, h6, h7, h8, *_ = dates
 

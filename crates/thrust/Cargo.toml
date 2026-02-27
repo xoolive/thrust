@@ -10,6 +10,8 @@ path = "src/lib.rs"
 
 [dependencies]
 geodesy = "0.14.0"
+chrono = { version = "0.4.42", default-features = false, features = ["std"] }
+csv = "1.4.0"
 ndarray-linalg = { version = "0.18.1", optional = true }
 numpy = { version = "0.27.0", optional = true }
 once_cell = "1.21.3"
@@ -17,6 +19,7 @@ polars = { version = "0.52.0", features = ["lazy", "timezones", "rolling_window"
 quick-xml = "0.39.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.148"
+reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 tokio = { version = "1", features = ["full"], optional = true }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", optional = true }
@@ -52,6 +55,10 @@ name = "route_segment"
 required-features = ["polars"]
 
 [[example]]
+name = "airspace"
+required-features = ["polars"]
+
+[[example]]
 name = "standard_instrument_arrival"
 required-features = ["polars"]
 
@@ -62,3 +69,18 @@ required-features = ["polars"]
 [[example]]
 name = "field15_serve"
 required-features = ["rest"]
+
+[[example]]
+name = "faa_open_data"
+
+[[example]]
+name = "faa_nasr"
+
+[[example]]
+name = "faa_nat"
+
+[[example]]
+name = "field15_multisource"
+
+[[example]]
+name = "ddr_decode"

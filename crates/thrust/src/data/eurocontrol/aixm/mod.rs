@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use quick_xml::{events::Event, name::QName, Reader};
 
 pub mod airport_heliport;
+pub mod airspace;
 pub mod arrival_leg;
 pub mod departure_leg;
 pub mod designated_point;

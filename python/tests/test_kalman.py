@@ -1,8 +1,9 @@
+# type: ignore
 # %%
 import timeit
 
 import pandas as pd
-from cartes.crs import EuroPP  # type: ignore
+from cartes.crs import EuroPP
 from traffic.algorithms.filters import ProcessXYZFilterBase
 from traffic.algorithms.filters.kalman import KalmanFilter6D
 from traffic.data.samples import noisy_landing

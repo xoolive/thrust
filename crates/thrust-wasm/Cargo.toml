@@ -1,0 +1,26 @@
+[package]
+name = "thrust-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "WASM bindings for traffic-thrust core parsers"
+repository = "https://github.com/xoolive/thrust"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = ["console_error_panic_hook"]
+console_error_panic_hook = ["dep:console_error_panic_hook"]
+
+[dependencies]
+traffic-thrust = { path = "../thrust" }
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+serde_json = "1"
+chrono = "0.4"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+uuid = { version = "1", features = ["js"] }
+console_error_panic_hook = { version = "0.1", optional = true }

@@ -1,0 +1,112 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust formatting
+        run: cargo fmt --all --check
+
+      - name: Rust linting
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Rust tests
+        run: cargo test --workspace --all-targets
+
+  python:
+    runs-on: ubuntu-latest
+    env:
+      FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
+      FAA_NASR_AIRAC: "2508"
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Restore FAA test data cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/thrust-faa
+          key: faa-data-${{ runner.os }}-v1
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Python formatting
+        run: uv run ruff format --check .
+
+      - name: Python linting
+        run: uv run ruff check .
+
+      - name: Python typing
+        run: uv run ty check thrust
+
+      - name: Python tests
+        run: uv run pytest tests/test_airac.py tests/test_faa_data_access.py --ignore=tests/test_kalman.py
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: WASM formatting
+        run: cargo fmt --all --check
+
+      - name: WASM linting
+        run: cargo clippy -p thrust-wasm --all-targets -- -D warnings
+
+      - name: WASM tests
+        run: cargo test -p thrust-wasm --all-targets
+
+      - name: Build WASM wrapper
+        run: wasm-pack build crates/thrust-wasm --target web --release --no-opt
+
+      - name: Install TS test dependencies
+        run: npm install --prefix crates/thrust-wasm/tests-ts
+
+      - name: Run TS tests
+        run: npm test --prefix crates/thrust-wasm/tests-ts
