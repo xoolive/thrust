@@ -52,16 +52,16 @@ target-version = "py310"
 addopts = "--log-level=INFO --color=yes"
 
 [[tool.ty.overrides]]
-include = ["tests/test_kalman.py"]
-rules = { "unresolved-import" = "ignore" }
-
-[[tool.ty.overrides]]
 include = ["tests/**/*.py"]
 rules = { "unresolved-import" = "ignore" }
 
 [[tool.ty.overrides]]
-include = ["thrust/**/*.py", "thrust/core/**/*.pyi"]
-rules = { "unresolved-import" = "ignore", "unused-type-ignore-comment" = "ignore", "invalid-return-type" = "ignore", "invalid-assignment" = "ignore", "unresolved-attribute" = "ignore", "no-matching-overload" = "ignore", "invalid-argument-type" = "ignore" }
+include = ["thrust/core/**/*.pyi"]
+rules = { "unresolved-import" = "ignore" }
+
+[[tool.ty.overrides]]
+include = ["thrust/*.py"]
+rules = { "unresolved-import" = "ignore" }
 
 [[tool.ty.overrides]]
 include = ["thrust/core.pyi"]

@@ -1,8 +1,8 @@
 # Explicitly import and expose the submodules
 from typing import TypedDict
 
-import numpy as np  # type: ignore[import]
-import numpy.typing as npt  # type: ignore[import]
+import numpy as np
+import numpy.typing as npt
 
 class IntervalCollectionDict(TypedDict):
     start: npt.NDArray[np.int64]

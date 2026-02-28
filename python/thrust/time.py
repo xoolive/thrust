@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from numbers import Real
 from typing import Any, Union
 
-import pandas as pd  # type: ignore[import]
+import pandas as pd
 
 timelike = Union[str, Real, datetime, pd.Timestamp]
 deltalike = Union[None, str, Real, timedelta, pd.Timedelta]
@@ -39,13 +39,24 @@ def to_datetime(time: timelike) -> datetime:
     '2017-01-14 12:00:00+00:00'
     """
 
-    if isinstance(time, str):
-        time = pd.Timestamp(time, tz="utc")
-    if isinstance(time, pd.Timestamp):
-        time = time.to_pydatetime()
-    if isinstance(time, Real):
-        time = datetime.fromtimestamp(float(time), timezone.utc)
-    if time.tzinfo is None:  # coverage: ignore
+    value: datetime
+    if isinstance(time, datetime):
+        value = time
+    elif isinstance(time, str):
+        stamp = pd.Timestamp(time, tz="utc")
+        if pd.isna(stamp):
+            msg = f"Invalid datetime string: {time!r}"
+            raise ValueError(msg)
+        value = stamp.to_pydatetime()
+    elif isinstance(time, pd.Timestamp):
+        if pd.isna(time):
+            msg = "Invalid pandas timestamp: NaT"
+            raise ValueError(msg)
+        value = time.to_pydatetime()
+    else:
+        value = datetime.fromtimestamp(float(time), timezone.utc)
+
+    if value.tzinfo is None:  # coverage: ignore
         _log.warning(
             "This timestamp is tz-naive. Things may not work as expected. "
             "If you construct your timestamps manually, consider passing a "
@@ -53,14 +64,25 @@ def to_datetime(time: timelike) -> datetime:
             "automatically, look at the tzinfo (resp. tz) argument of the "
             "datetime (resp. pd.Timestamp) constructor."
         )
-    return time  # type: ignore
+    return value
 
 
 def to_timedelta(delta: deltalike, **kwargs: Any) -> pd.Timedelta:
+    value: pd.Timedelta
     if isinstance(delta, Real):
-        delta = pd.Timedelta(seconds=float(delta))
+        value = pd.Timedelta(seconds=float(delta))
     elif isinstance(delta, (str, timedelta)):
-        delta = pd.Timedelta(delta)
+        value = pd.Timedelta(delta)
+    elif isinstance(delta, pd.Timedelta):
+        value = delta
     elif delta is None:
-        delta = pd.Timedelta(**kwargs)
-    return delta
+        value = pd.Timedelta(**kwargs)
+    else:
+        msg = f"Unsupported timedelta value: {delta!r}"
+        raise TypeError(msg)
+
+    if pd.isna(value):
+        msg = f"Invalid timedelta value: {delta!r}"
+        raise ValueError(msg)
+
+    return value

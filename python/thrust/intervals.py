@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Iterator, Literal
+from typing import Any, Iterator, Literal, cast
 
-import pandas as pd  # type: ignore[import]
+import pandas as pd
 
 from .core.intervals import (
     collection_add,
@@ -126,7 +126,10 @@ class Interval:
         return NotImplemented
 
     def duration(self) -> pd.Timedelta:
-        return self.stop - self.start
+        delta = pd.Timedelta(self.stop - self.start)
+        if isinstance(delta, pd.Timedelta):
+            return delta
+        raise ValueError("Invalid interval duration")
 
     def overlap(self, other: Interval) -> bool:
         """Returns True if two intervals overlap."""
@@ -171,53 +174,76 @@ class IntervalCollection:
 
     def __init__(
         self,
-        data: None
-        | pd.DataFrame
-        | Interval
-        | list[Interval]
-        | timelike
-        | list[timelike] = None,
-        *other: Interval | timelike | list[timelike],
+        data: Any = None,
+        *other: Any,
         start: None | timelike | list[timelike] = None,
         stop: None | timelike | list[timelike] = None,
     ) -> None:
         if isinstance(data, Interval):
+            if any(not isinstance(elt, Interval) for elt in other):
+                raise TypeError(
+                    "When first argument is an Interval, "
+                    "all positional arguments must be Interval"
+                )
             data = [data, *other]
+
         if isinstance(data, list):
             if all(isinstance(elt, Interval) for elt in data):
-                if len(data) == 1:
+                intervals = cast(list[Interval], data)
+                if len(intervals) == 1:
                     data = pd.DataFrame.from_records(
-                        [{"start": data[0].start, "stop": data[0].stop}]
+                        [
+                            {
+                                "start": intervals[0].start,
+                                "stop": intervals[0].stop,
+                            }
+                        ]
                     )
                 else:
-                    res = sum(data[1:], data[0])
-                    data = res.data  # type: ignore
+                    merged = IntervalCollection(intervals[0])
+                    for interval in intervals[1:]:
+                        merged = merged + interval
+                    data = merged.data
+
         if not isinstance(data, pd.DataFrame):
-            # We reorder parameters here to accept notations like
-            # IntervalCollection(start, stop)
+            # Accept notations like IntervalCollection(start, stop)
             if start is None or stop is None:
-                start, stop, *_ = data, *other, start, stop
+                positional = [data, *other]
+                if start is None and positional:
+                    start = cast(timelike | list[timelike], positional.pop(0))
+                if stop is None and positional:
+                    stop = cast(timelike | list[timelike], positional.pop(0))
                 data = None
+
         if data is None:
             if start is None or stop is None:
                 msg = "If no data is specified, provide start and stop"
                 raise TypeError(msg)
-            if isinstance(start, (str, float, datetime, pd.Timestamp)):
-                start = [start]
-            if isinstance(stop, (str, float, datetime, pd.Timestamp)):
-                stop = [stop]
-            assert isinstance(start, list)
-            assert isinstance(stop, list)
-            if len(start) == 0 or len(stop) == 0:
+
+            start_values: list[timelike]
+            stop_values: list[timelike]
+            if isinstance(start, (str, int, float, datetime, pd.Timestamp)):
+                start_values = [start]
+            else:
+                start_values = cast(list[timelike], start)
+            if isinstance(stop, (str, int, float, datetime, pd.Timestamp)):
+                stop_values = [stop]
+            else:
+                stop_values = cast(list[timelike], stop)
+
+            if len(start_values) == 0 or len(stop_values) == 0:
                 msg = "If no data is specified, provide start and stop"
                 raise TypeError(msg)
 
             data = pd.DataFrame(
                 {
-                    "start": [to_datetime(t) for t in start],
-                    "stop": [to_datetime(t) for t in stop],
+                    "start": [to_datetime(t) for t in start_values],
+                    "stop": [to_datetime(t) for t in stop_values],
                 }
             )
+
+        if not isinstance(data, pd.DataFrame):
+            raise TypeError("Expected pandas DataFrame")
 
         # assert isinstance(data, pd.DataFrame)
         # assert data.eval("(start > stop).sum()") == 0
@@ -237,10 +263,10 @@ class IntervalCollection:
                 return False
             left = self.data.sort_values(by=["start"], ignore_index=True)
             right = other.data.sort_values(by=["start"], ignore_index=True)
-            left_start = _to_epoch_seconds(left["start"])
-            left_stop = _to_epoch_seconds(left["stop"])
-            right_start = _to_epoch_seconds(right["start"])
-            right_stop = _to_epoch_seconds(right["stop"])
+            left_start = _to_epoch_seconds(cast(pd.Series, left["start"]))
+            left_stop = _to_epoch_seconds(cast(pd.Series, left["stop"]))
+            right_start = _to_epoch_seconds(cast(pd.Series, right["start"]))
+            right_stop = _to_epoch_seconds(cast(pd.Series, right["stop"]))
             return (left_start == right_start).all() and (
                 left_stop == right_stop
             ).all()
