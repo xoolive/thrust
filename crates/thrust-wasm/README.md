@@ -9,6 +9,13 @@ python -m http.server 8000 -d crates/thrust-wasm
 
 Open `http://localhost:8000`.
 
+## Runtime guidance
+
+- Large raw datasets (EUROCONTROL AIXM/DDR, full FAA NASR cycles) are intended for server-side Node.js usage.
+- Browser usage should prefer preprocessed, scope-limited data slices.
+- EUROCONTROL WASM resolvers now accept folder-like payloads (filename -> content) and expect full dataset file sets.
+  - DDR expected keys: `navpoints.nnpt`, `routes.routes`, `airports.arp`, `sectors.are`, `sectors.sls`, `free_route.are`, `free_route.sls`, `free_route.frp`.
+
 Minimal browser usage:
 
 ```js

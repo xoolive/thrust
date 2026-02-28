@@ -1,6 +1,7 @@
 use pyo3::{exceptions::PyOSError, prelude::*, types::PyDict};
 use serde_json::Value;
 use std::fs::File;
+use std::path::PathBuf;
 use thrust::data::eurocontrol::database::{AirwayDatabase, ResolvedPoint, ResolvedRoute};
 use thrust::data::eurocontrol::ddr::routes::parse_routes_dir;
 use thrust::data::faa::nasr::parse_field15_data_from_nasr_zip;
@@ -129,9 +130,8 @@ pub struct AixmAirwaysSource {
 #[pymethods]
 impl AixmAirwaysSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
-        let database =
-            AirwayDatabase::new(std::path::Path::new(&path)).map_err(|e| PyOSError::new_err(e.to_string()))?;
+    fn new(path: PathBuf) -> PyResult<Self> {
+        let database = AirwayDatabase::new(&path).map_err(|e| PyOSError::new_err(e.to_string()))?;
         Ok(Self { database })
     }
 
@@ -156,7 +156,7 @@ pub struct NasrAirwaysSource {
 #[pymethods]
 impl NasrAirwaysSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
+    fn new(path: PathBuf) -> PyResult<Self> {
         let data = parse_field15_data_from_nasr_zip(path).map_err(|e| PyOSError::new_err(e.to_string()))?;
 
         let mut point_index: std::collections::HashMap<String, AirwayPointRecord> = std::collections::HashMap::new();
@@ -264,9 +264,9 @@ pub struct FaaArcgisAirwaysSource {
 #[pymethods]
 impl FaaArcgisAirwaysSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
-        let features = read_features(&std::path::Path::new(&path).join("faa_ats_routes.json"))
-            .map_err(|e| PyOSError::new_err(e.to_string()))?;
+    fn new(path: PathBuf) -> PyResult<Self> {
+        let features =
+            read_features(&path.join("faa_ats_routes.json")).map_err(|e| PyOSError::new_err(e.to_string()))?;
 
         let mut by_name: std::collections::HashMap<String, Vec<AirwayPointRecord>> = std::collections::HashMap::new();
 
@@ -346,7 +346,7 @@ pub struct DdrAirwaysSource {
 #[pymethods]
 impl DdrAirwaysSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
+    fn new(path: PathBuf) -> PyResult<Self> {
         let parsed = parse_routes_dir(path).map_err(|e| PyOSError::new_err(e.to_string()))?;
         let mut by_name: std::collections::HashMap<String, Vec<AirwayPointRecord>> = std::collections::HashMap::new();
 

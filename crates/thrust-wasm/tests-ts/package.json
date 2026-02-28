@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "tsx test/wasm.spec.ts"
+    "test": "tsx test/run.ts"
   },
   "devDependencies": {
     "tsx": "^4.20.5",

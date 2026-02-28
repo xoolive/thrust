@@ -2,6 +2,7 @@ use pyo3::{exceptions::PyOSError, prelude::*, types::PyDict};
 use serde_json::Value;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use thrust::data::eurocontrol::aixm::airport_heliport::parse_airport_heliport_zip_file;
 use thrust::data::faa::nasr::parse_field15_data_from_nasr_zip;
 
@@ -54,8 +55,8 @@ pub struct AixmAirportsSource {
 #[pymethods]
 impl AixmAirportsSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
-        let zip_path = std::path::Path::new(&path).join("AirportHeliport.BASELINE.zip");
+    fn new(path: PathBuf) -> PyResult<Self> {
+        let zip_path = path.join("AirportHeliport.BASELINE.zip");
         let airports = parse_airport_heliport_zip_file(zip_path)
             .map_err(|e| PyOSError::new_err(e.to_string()))?
             .into_values()
@@ -115,7 +116,7 @@ pub struct NasrAirportsSource {
 #[pymethods]
 impl NasrAirportsSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
+    fn new(path: PathBuf) -> PyResult<Self> {
         let data = parse_field15_data_from_nasr_zip(path).map_err(|e| PyOSError::new_err(e.to_string()))?;
 
         let airports = data
@@ -191,8 +192,8 @@ pub struct DdrAirportsSource {
 #[pymethods]
 impl DdrAirportsSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
-        let root = std::path::Path::new(&path);
+    fn new(path: PathBuf) -> PyResult<Self> {
+        let root = path.as_path();
         let file = std::fs::read_dir(root)
             .map_err(|e| PyOSError::new_err(e.to_string()))?
             .flatten()
@@ -263,9 +264,8 @@ pub struct FaaArcgisAirportsSource {
 #[pymethods]
 impl FaaArcgisAirportsSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
-        let file = File::open(std::path::Path::new(&path).join("faa_airports.json"))
-            .map_err(|e| PyOSError::new_err(e.to_string()))?;
+    fn new(path: PathBuf) -> PyResult<Self> {
+        let file = File::open(path.join("faa_airports.json")).map_err(|e| PyOSError::new_err(e.to_string()))?;
         let payload: Value = serde_json::from_reader(file).map_err(|e| PyOSError::new_err(e.to_string()))?;
 
         let mut airports = Vec::new();

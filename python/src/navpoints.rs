@@ -1,6 +1,7 @@
 use pyo3::{exceptions::PyOSError, prelude::*, types::PyDict};
 use serde_json::Value;
 use std::fs::File;
+use std::path::PathBuf;
 use thrust::data::eurocontrol::aixm::designated_point::parse_designated_point_zip_file;
 use thrust::data::eurocontrol::aixm::navaid::parse_navaid_zip_file;
 use thrust::data::eurocontrol::ddr::navpoints::parse_navpoints_dir;
@@ -61,8 +62,8 @@ pub struct AixmNavpointsSource {
 #[pymethods]
 impl AixmNavpointsSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
-        let root = std::path::Path::new(&path);
+    fn new(path: PathBuf) -> PyResult<Self> {
+        let root = path.as_path();
         let designated = parse_designated_point_zip_file(root.join("DesignatedPoint.BASELINE.zip"))
             .map_err(|e| PyOSError::new_err(e.to_string()))?;
         let navaids =
@@ -138,7 +139,7 @@ pub struct NasrNavpointsSource {
 #[pymethods]
 impl NasrNavpointsSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
+    fn new(path: PathBuf) -> PyResult<Self> {
         let data = parse_field15_data_from_nasr_zip(path).map_err(|e| PyOSError::new_err(e.to_string()))?;
 
         let points = data
@@ -228,8 +229,8 @@ pub struct FaaArcgisNavpointsSource {
 #[pymethods]
 impl FaaArcgisNavpointsSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
-        let root = std::path::Path::new(&path);
+    fn new(path: PathBuf) -> PyResult<Self> {
+        let root = path.as_path();
 
         let mut points = Vec::new();
 
@@ -319,7 +320,7 @@ pub struct DdrNavpointsSource {
 #[pymethods]
 impl DdrNavpointsSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
+    fn new(path: PathBuf) -> PyResult<Self> {
         let parsed = parse_navpoints_dir(path).map_err(|e| PyOSError::new_err(e.to_string()))?;
         let points = parsed
             .into_iter()

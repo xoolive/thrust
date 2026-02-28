@@ -1,5 +1,6 @@
 use pyo3::{exceptions::PyOSError, prelude::*, types::PyDict};
 use serde_json::Value;
+use std::path::PathBuf;
 use thrust::data::eurocontrol::aixm::airspace::parse_airspace_zip_file;
 use thrust::data::eurocontrol::ddr::airspaces::{
     find_file_with_prefix_suffix, parse_are_file, parse_sls_file, DdrSectorLayer,
@@ -53,8 +54,8 @@ pub struct AixmAirspacesSource {
 #[pymethods]
 impl AixmAirspacesSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
-        let zip_path = std::path::Path::new(&path).join("Airspace.BASELINE.zip");
+    fn new(path: PathBuf) -> PyResult<Self> {
+        let zip_path = path.join("Airspace.BASELINE.zip");
         let parsed = parse_airspace_zip_file(zip_path).map_err(|e| PyOSError::new_err(e.to_string()))?;
 
         let mut airspaces = Vec::new();
@@ -115,7 +116,7 @@ pub struct AixmFraAirspacesSource {
 #[pymethods]
 impl AixmFraAirspacesSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
+    fn new(path: PathBuf) -> PyResult<Self> {
         let base = AixmAirspacesSource::new(path)?;
         let airspaces = base
             .airspaces
@@ -152,8 +153,8 @@ pub struct DdrFraAirspacesSource {
 #[pymethods]
 impl DdrFraAirspacesSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
-        let root = std::path::Path::new(&path);
+    fn new(path: PathBuf) -> PyResult<Self> {
+        let root = path.as_path();
         let are = find_file_with_prefix_suffix(root, "Free_Route_", ".are")
             .ok_or_else(|| PyOSError::new_err("Unable to find Free_Route_*.are"))?;
         let sls = find_file_with_prefix_suffix(root, "Free_Route_", ".sls")
@@ -195,8 +196,8 @@ impl DdrFraAirspacesSource {
 #[pymethods]
 impl DdrAirspacesSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
-        let root = std::path::Path::new(&path);
+    fn new(path: PathBuf) -> PyResult<Self> {
+        let root = path.as_path();
 
         let are = find_file_with_prefix_suffix(root, "Sectors_", ".are")
             .ok_or_else(|| PyOSError::new_err("Unable to find Sectors_*.are"))?;
@@ -351,8 +352,8 @@ pub struct NasrAirspacesSource {
 #[pymethods]
 impl NasrAirspacesSource {
     #[new]
-    fn new(path: String) -> PyResult<Self> {
-        let bytes = std::fs::read(std::path::Path::new(&path)).map_err(|e| PyOSError::new_err(e.to_string()))?;
+    fn new(path: PathBuf) -> PyResult<Self> {
+        let bytes = std::fs::read(path).map_err(|e| PyOSError::new_err(e.to_string()))?;
         let parsed = parse_airspaces_from_nasr_bytes(&bytes).map_err(|e| PyOSError::new_err(e.to_string()))?;
 
         let airspaces = parsed
@@ -390,9 +391,8 @@ impl NasrAirspacesSource {
 impl FaaAirspacesSource {
     #[new]
     #[pyo3(signature = (path=None))]
-    fn new(path: Option<String>) -> PyResult<Self> {
-        let features: Vec<FaaFeature> = if let Some(path_str) = path {
-            let root = std::path::Path::new(&path_str);
+    fn new(path: Option<PathBuf>) -> PyResult<Self> {
+        let features: Vec<FaaFeature> = if let Some(root) = path {
             let names = [
                 "faa_airspace_boundary.json",
                 "faa_class_airspace.json",

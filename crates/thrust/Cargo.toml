@@ -32,6 +32,7 @@ polars = ["dep:polars", "dep:ndarray-linalg", "dep:numpy"]
 rest = ["dep:warp", "dep:tokio", "dep:tracing-subscriber"]
 
 [dev-dependencies]
+dotenvy = "0.15.7"
 jiff = "0.2.18"
 
 [[example]]
