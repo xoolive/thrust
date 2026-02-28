@@ -8,8 +8,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
   CARGO_TARGET_DIR: ${{ github.workspace }}/target
-  FAA_CACHE_KEY: faa-data-v1
-  EUROCONTROL_CACHE_KEY: eurocontrol-data-v1
 
 jobs:
   rust-core-build:
@@ -46,15 +44,15 @@ jobs:
   faa-cache-fill:
     runs-on: ubuntu-latest
     env:
-      FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
+      FAA_TEST_DATA_DIR: ${{ github.workspace }}/.ci-cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
     steps:
       - name: Restore FAA cache
         id: faa-cache
         uses: actions/cache@v4
         with:
-          path: ~/.cache/thrust-faa
-          key: ${{ env.FAA_CACHE_KEY }}
+          path: ${{ github.workspace }}/.ci-cache/thrust-faa
+          key: faa-data-v1
 
       - name: Populate FAA cache files
         if: steps.faa-cache.outputs.cache-hit != 'true'
@@ -93,21 +91,19 @@ jobs:
 
   eurocontrol-cache-fill:
     runs-on: ubuntu-latest
-    env:
-      EUROCONTROL_CACHE_DIR: ~/.cache/thrust-eurocontrol
     steps:
       - name: Restore Eurocontrol cache
         id: eurocontrol-cache
         uses: actions/cache@v4
         with:
-          path: ~/.cache/thrust-eurocontrol
-          key: ${{ env.EUROCONTROL_CACHE_KEY }}
+          path: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol
+          key: eurocontrol-data-v1
 
       - name: Populate Eurocontrol cache folders
         if: steps.eurocontrol-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
-          ROOT="$EUROCONTROL_CACHE_DIR"
+          ROOT="${{ github.workspace }}/.ci-cache/thrust-eurocontrol"
           mkdir -p "$ROOT"
 
           download_if_missing () {
@@ -161,7 +157,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [rust-core-build]
     env:
-      FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
+      FAA_TEST_DATA_DIR: ${{ github.workspace }}/.ci-cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
     steps:
       - uses: actions/checkout@v6
@@ -192,10 +188,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [rust-core-build, faa-cache-fill, eurocontrol-cache-fill]
     env:
-      FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
+      FAA_TEST_DATA_DIR: ${{ github.workspace }}/.ci-cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
-      THRUST_AIXM_PATH: ~/.cache/thrust-eurocontrol/AIXM
-      THRUST_DDR_PATH: ~/.cache/thrust-eurocontrol/DDR
+      THRUST_AIXM_PATH: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol/AIXM
+      THRUST_DDR_PATH: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol/DDR
     steps:
       - uses: actions/checkout@v6
         with:
@@ -216,14 +212,14 @@ jobs:
       - name: Restore FAA test data cache
         uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/thrust-faa
-          key: ${{ env.FAA_CACHE_KEY }}
+          path: ${{ github.workspace }}/.ci-cache/thrust-faa
+          key: faa-data-v1
 
       - name: Restore Eurocontrol data cache
         uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/thrust-eurocontrol
-          key: ${{ env.EUROCONTROL_CACHE_KEY }}
+          path: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol
+          key: eurocontrol-data-v1
 
       - name: Rust tests
         run: cargo test --workspace --all-targets
@@ -232,7 +228,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [rust-core-build]
     env:
-      FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
+      FAA_TEST_DATA_DIR: ${{ github.workspace }}/.ci-cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
     defaults:
       run:
@@ -274,10 +270,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [rust-core-build, faa-cache-fill, eurocontrol-cache-fill]
     env:
-      FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
+      FAA_TEST_DATA_DIR: ${{ github.workspace }}/.ci-cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
-      THRUST_AIXM_PATH: ~/.cache/thrust-eurocontrol/AIXM
-      THRUST_DDR_PATH: ~/.cache/thrust-eurocontrol/DDR
+      THRUST_AIXM_PATH: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol/AIXM
+      THRUST_DDR_PATH: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol/DDR
     defaults:
       run:
         working-directory: python
@@ -305,14 +301,14 @@ jobs:
       - name: Restore FAA test data cache
         uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/thrust-faa
-          key: ${{ env.FAA_CACHE_KEY }}
+          path: ${{ github.workspace }}/.ci-cache/thrust-faa
+          key: faa-data-v1
 
       - name: Restore Eurocontrol data cache
         uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/thrust-eurocontrol
-          key: ${{ env.EUROCONTROL_CACHE_KEY }}
+          path: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol
+          key: eurocontrol-data-v1
 
       - name: Install dependencies
         run: uv sync --dev
@@ -324,7 +320,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [rust-core-build]
     env:
-      FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
+      FAA_TEST_DATA_DIR: ${{ github.workspace }}/.ci-cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
     steps:
       - uses: actions/checkout@v6
@@ -377,10 +373,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [rust-core-build, faa-cache-fill, eurocontrol-cache-fill]
     env:
-      FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
+      FAA_TEST_DATA_DIR: ${{ github.workspace }}/.ci-cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
-      THRUST_AIXM_PATH: ~/.cache/thrust-eurocontrol/AIXM
-      THRUST_DDR_PATH: ~/.cache/thrust-eurocontrol/DDR
+      THRUST_AIXM_PATH: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol/AIXM
+      THRUST_DDR_PATH: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol/DDR
     steps:
       - uses: actions/checkout@v6
         with:
@@ -389,14 +385,14 @@ jobs:
       - name: Restore FAA test data cache
         uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/thrust-faa
-          key: ${{ env.FAA_CACHE_KEY }}
+          path: ${{ github.workspace }}/.ci-cache/thrust-faa
+          key: faa-data-v1
 
       - name: Restore Eurocontrol data cache
         uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/thrust-eurocontrol
-          key: ${{ env.EUROCONTROL_CACHE_KEY }}
+          path: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol
+          key: eurocontrol-data-v1
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable

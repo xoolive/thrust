@@ -14,7 +14,7 @@ def _aixm_path() -> Path:
     assert value is not None, (
         "THRUST_AIXM_PATH must be set for Eurocontrol tests"
     )
-    path = Path(value)
+    path = Path(value).expanduser()
     assert path.exists(), f"THRUST_AIXM_PATH does not exist: {path}"
     return path
 
@@ -24,7 +24,7 @@ def _ddr_path() -> Path:
     assert value is not None, (
         "THRUST_DDR_PATH must be set for Eurocontrol tests"
     )
-    path = Path(value)
+    path = Path(value).expanduser()
     assert path.exists(), f"THRUST_DDR_PATH does not exist: {path}"
     return path
 
@@ -56,7 +56,8 @@ def test_aixm_sources_parse_when_folder_available() -> None:
     assert len(lszh) >= 1
     assert any("ZURICH" in str(row.name or "").upper() for row in lszh)
 
-    # Depending on DDR cycle/source typing, NARAK can be exposed as FIX or NAVAID.
+    # Depending on DDR cycle/source typing,
+    # NARAK can be exposed as FIX or NAVAID.
     narak_fix = navpoint_src.resolve_point("NARAK", "fix")
     narak_navaid = navpoint_src.resolve_point("NARAK", "navaid")
     assert len(narak_fix) + len(narak_navaid) >= 1
