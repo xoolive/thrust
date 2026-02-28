@@ -17,10 +17,11 @@ use thrust::data::eurocontrol::ddr::navpoints::parse_navpoints_dir;
 use thrust::data::eurocontrol::ddr::routes::parse_routes_dir;
 use thrust::data::faa::nasr::parse_field15_data_from_nasr_bytes;
 
+const FAA_ARCGIS_BASE: &str = "https://opendata.arcgis.com/datasets";
 const FAA_ARCGIS_AIRPORTS_DATASET: &str = "e747ab91a11045e8b3f8a3efd093d3b5_0";
 const FAA_ARCGIS_DESIGNATED_POINTS_DATASET: &str = "861043a88ff4486c97c3789e7dcdccc6_0";
 const FAA_ARCGIS_NAVAID_COMPONENTS_DATASET: &str = "c9254c171b6741d3a5e494860761443a_0";
-const FAA_ARCGIS_J48_URL: &str = "https://hub.arcgis.com/api/v3/datasets/acf64966af5f48a1a40fdbcb31238ba7_0/downloads/data?format=geojson&spatialRefId=4326&where=IDENT%3D%27J48%27";
+const FAA_ARCGIS_ATS_ROUTES_DATASET: &str = "acf64966af5f48a1a40fdbcb31238ba7_0";
 const FAA_NASR_BASE: &str = "https://nfdc.faa.gov/webContent/28DaySub";
 
 fn maybe_load_dotenv() {
@@ -68,30 +69,10 @@ fn fetch_url_to_path(url: &str, path: &Path) -> Result<(), Box<dyn std::error::E
     }
 }
 
-fn ensure_arcgis_airports_geojson() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let path = cache_root().join("arcgis").join("faa_airports.json");
-    let url = format!("https://opendata.arcgis.com/datasets/{FAA_ARCGIS_AIRPORTS_DATASET}.geojson");
+fn ensure_arcgis_geojson(filename: &str, dataset_id: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let path = cache_root().join("arcgis").join(filename);
+    let url = format!("{FAA_ARCGIS_BASE}/{dataset_id}.geojson");
     fetch_url_to_path(&url, &path)?;
-    Ok(path)
-}
-
-fn ensure_arcgis_designated_points_geojson() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let path = cache_root().join("arcgis").join("faa_designated_points.json");
-    let url = format!("https://opendata.arcgis.com/datasets/{FAA_ARCGIS_DESIGNATED_POINTS_DATASET}.geojson");
-    fetch_url_to_path(&url, &path)?;
-    Ok(path)
-}
-
-fn ensure_arcgis_navaid_components_geojson() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let path = cache_root().join("arcgis").join("faa_navaid_components.json");
-    let url = format!("https://opendata.arcgis.com/datasets/{FAA_ARCGIS_NAVAID_COMPONENTS_DATASET}.geojson");
-    fetch_url_to_path(&url, &path)?;
-    Ok(path)
-}
-
-fn ensure_arcgis_j48_geojson() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let path = cache_root().join("arcgis").join("faa_ats_routes.json");
-    fetch_url_to_path(FAA_ARCGIS_J48_URL, &path)?;
     Ok(path)
 }
 
@@ -253,7 +234,8 @@ fn eurocontrol_entities_are_resolvable_when_paths_are_set() {
 #[test]
 fn faa_arcgis_entities_are_present() {
     maybe_load_dotenv();
-    let airports_path = ensure_arcgis_airports_geojson().expect("unable to fetch FAA airports geojson");
+    let airports_path = ensure_arcgis_geojson("faa_airports.json", FAA_ARCGIS_AIRPORTS_DATASET)
+        .expect("unable to fetch FAA airports geojson");
     let airports_json = fs::read_to_string(airports_path).expect("unable to read FAA airports json");
     let payload: Value = serde_json::from_str(&airports_json).expect("invalid FAA airports json");
     let features = payload
@@ -272,7 +254,8 @@ fn faa_arcgis_entities_are_present() {
     }
 
     let designated_points_path =
-        ensure_arcgis_designated_points_geojson().expect("unable to fetch FAA designated points");
+        ensure_arcgis_geojson("faa_designated_points.json", FAA_ARCGIS_DESIGNATED_POINTS_DATASET)
+            .expect("unable to fetch FAA designated points");
     let designated_points_payload: Value = serde_json::from_str(
         &fs::read_to_string(designated_points_path).expect("unable to read FAA designated points json"),
     )
@@ -289,7 +272,8 @@ fn faa_arcgis_entities_are_present() {
         "missing FAA fix BASYE"
     );
 
-    let navaids_path = ensure_arcgis_navaid_components_geojson().expect("unable to fetch FAA navaid components");
+    let navaids_path = ensure_arcgis_geojson("faa_navaid_components.json", FAA_ARCGIS_NAVAID_COMPONENTS_DATASET)
+        .expect("unable to fetch FAA navaid components");
     let navaids_payload: Value =
         serde_json::from_str(&fs::read_to_string(navaids_path).expect("unable to read FAA navaids json"))
             .expect("invalid FAA navaids json");
@@ -316,7 +300,8 @@ fn faa_arcgis_entities_are_present() {
         "missing FAA navaid BAF with expected name"
     );
 
-    let routes_path = ensure_arcgis_j48_geojson().expect("unable to fetch FAA ATS routes");
+    let routes_path = ensure_arcgis_geojson("faa_ats_routes.json", FAA_ARCGIS_ATS_ROUTES_DATASET)
+        .expect("unable to fetch FAA ATS routes");
     let routes_payload: Value =
         serde_json::from_str(&fs::read_to_string(routes_path).expect("unable to read FAA routes json"))
             .expect("invalid FAA routes json");

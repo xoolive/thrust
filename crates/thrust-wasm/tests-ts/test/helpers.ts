@@ -42,6 +42,13 @@ const cacheRoot = rawCacheRoot.startsWith("~/")
   : rawCacheRoot;
 const arcgisDir = join(cacheRoot, "arcgis");
 const nasrDir = join(cacheRoot, "nasr");
+const ARCGIS_BASE = "https://opendata.arcgis.com/datasets";
+const ARCGIS_DATASETS: Record<string, string> = {
+  "faa_airports.json": "e747ab91a11045e8b3f8a3efd093d3b5_0",
+  "faa_ats_routes.json": "acf64966af5f48a1a40fdbcb31238ba7_0",
+  "faa_designated_points.json": "861043a88ff4486c97c3789e7dcdccc6_0",
+  "faa_navaid_components.json": "c9254c171b6741d3a5e494860761443a_0",
+};
 
 let wasmModulePromise: Promise<any> | null = null;
 
@@ -87,14 +94,19 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-export async function ensureArcgisCacheFile(filename: string, datasetId: string): Promise<string> {
+export async function ensureArcgisCacheFile(filename: string): Promise<string> {
   const filePath = join(arcgisDir, filename);
   if (existsSync(filePath) && readFileSync(filePath).length > 0) {
     return filePath;
   }
 
+  const datasetId = ARCGIS_DATASETS[filename];
+  if (!datasetId) {
+    throw new Error(`Unknown ArcGIS dataset for cache file: ${filename}`);
+  }
+
   mkdirSync(arcgisDir, { recursive: true });
-  const url = `https://opendata.arcgis.com/datasets/${datasetId}.geojson`;
+  const url = `${ARCGIS_BASE}/${datasetId}.geojson`;
   const body = await fetchBytes(url);
   writeFileSync(filePath, body);
   return filePath;

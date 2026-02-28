@@ -23,14 +23,10 @@ NASR_BASE = "https://nfdc.faa.gov/webContent/28DaySub"
 
 ARCGIS_FILES = {
     "faa_airports.json": "e747ab91a11045e8b3f8a3efd093d3b5_0",
+    "faa_ats_routes.json": "acf64966af5f48a1a40fdbcb31238ba7_0",
     "faa_designated_points.json": "861043a88ff4486c97c3789e7dcdccc6_0",
     "faa_navaid_components.json": "c9254c171b6741d3a5e494860761443a_0",
 }
-ATS_ROUTES_URL = (
-    "https://hub.arcgis.com/api/v3/datasets/"
-    "acf64966af5f48a1a40fdbcb31238ba7_0/downloads/data"
-    "?format=geojson&spatialRefId=4326&where=IDENT%3D%27J48%27"
-)
 
 
 def _cache_dir() -> Path:
@@ -46,7 +42,7 @@ def _download(url: str, target: Path) -> None:
     if target.exists() and target.stat().st_size > 0:
         return
 
-    @stamina.retry(on=httpx.HTTPError, attempts=3)
+    @stamina.retry(on=httpx.HTTPError, attempts=5)
     def _fetch_content() -> bytes:
         with httpx.Client(follow_redirects=True, timeout=120.0) as client:
             response = client.get(url)
@@ -123,7 +119,6 @@ def _ensure_arcgis_files() -> Path:
     root = _cache_dir() / "arcgis"
     for filename, dataset_id in ARCGIS_FILES.items():
         _download(f"{ARCGIS_BASE}/{dataset_id}.geojson", root / filename)
-    _download(ATS_ROUTES_URL, root / "faa_ats_routes.json")
     return root
 
 

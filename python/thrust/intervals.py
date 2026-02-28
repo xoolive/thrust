@@ -19,6 +19,15 @@ from .core.intervals import (
 from .time import timelike, to_datetime
 
 
+def _to_epoch_seconds(series: pd.Series) -> Any:
+    values = series.astype("int64").to_numpy()
+    unit = getattr(series.dtype, "unit", "ns")
+    scale = {"ns": 1_000_000_000, "us": 1_000_000, "ms": 1_000, "s": 1}.get(
+        unit, 1_000_000_000
+    )
+    return values // scale
+
+
 class Interval:
     start: datetime
     stop: datetime
@@ -228,7 +237,13 @@ class IntervalCollection:
                 return False
             left = self.data.sort_values(by=["start"], ignore_index=True)
             right = other.data.sort_values(by=["start"], ignore_index=True)
-            return left.equals(right)  # type: ignore
+            left_start = _to_epoch_seconds(left["start"])
+            left_stop = _to_epoch_seconds(left["stop"])
+            right_start = _to_epoch_seconds(right["start"])
+            right_stop = _to_epoch_seconds(right["stop"])
+            return (left_start == right_start).all() and (
+                left_stop == right_stop
+            ).all()
         return False
 
     def __radd__(self, other: Literal[0] | Interval) -> IntervalCollection:
@@ -250,8 +265,8 @@ class IntervalCollection:
         """
         if isinstance(other, Interval):
             res = collection_addi(
-                self.data.start.astype(int).values // 1_000_000_000,
-                self.data.stop.astype(int).values // 1_000_000_000,
+                _to_epoch_seconds(self.data.start),
+                _to_epoch_seconds(self.data.stop),
                 int(other.start.timestamp()),
                 int(other.stop.timestamp()),
             )
@@ -264,10 +279,10 @@ class IntervalCollection:
 
         if isinstance(other, IntervalCollection):
             res = collection_add(
-                self.data.start.astype(int).values // 1_000_000_000,
-                self.data.stop.astype(int).values // 1_000_000_000,
-                other.data.start.astype(int).values // 1_000_000_000,
-                other.data.stop.astype(int).values // 1_000_000_000,
+                _to_epoch_seconds(self.data.start),
+                _to_epoch_seconds(self.data.stop),
+                _to_epoch_seconds(other.data.start),
+                _to_epoch_seconds(other.data.stop),
             )
             data = pd.DataFrame({"start": res["start"], "stop": res["stop"]})
             data = data.eval(
@@ -301,8 +316,8 @@ class IntervalCollection:
         """
         if isinstance(other, Interval):
             res = collection_subi(
-                self.data.start.astype(int).values // 1_000_000_000,
-                self.data.stop.astype(int).values // 1_000_000_000,
+                _to_epoch_seconds(self.data.start),
+                _to_epoch_seconds(self.data.stop),
                 int(other.start.timestamp()),
                 int(other.stop.timestamp()),
             )
@@ -317,10 +332,10 @@ class IntervalCollection:
 
         if isinstance(other, IntervalCollection):
             res = collection_sub(
-                self.data.start.astype(int).values // 1_000_000_000,
-                self.data.stop.astype(int).values // 1_000_000_000,
-                other.data.start.astype(int).values // 1_000_000_000,
-                other.data.stop.astype(int).values // 1_000_000_000,
+                _to_epoch_seconds(self.data.start),
+                _to_epoch_seconds(self.data.stop),
+                _to_epoch_seconds(other.data.start),
+                _to_epoch_seconds(other.data.stop),
             )
             if len(res["start"]) == 0:
                 return None
@@ -370,8 +385,8 @@ class IntervalCollection:
 
         if isinstance(other, Interval):
             res = collection_andi(
-                self.data.start.astype(int).values // 1_000_000_000,
-                self.data.stop.astype(int).values // 1_000_000_000,
+                _to_epoch_seconds(self.data.start),
+                _to_epoch_seconds(self.data.stop),
                 int(other.start.timestamp()),
                 int(other.stop.timestamp()),
             )
@@ -386,10 +401,10 @@ class IntervalCollection:
 
         if isinstance(other, IntervalCollection):
             res = collection_and(
-                self.data.start.astype(int).values // 1_000_000_000,
-                self.data.stop.astype(int).values // 1_000_000_000,
-                other.data.start.astype(int).values // 1_000_000_000,
-                other.data.stop.astype(int).values // 1_000_000_000,
+                _to_epoch_seconds(self.data.start),
+                _to_epoch_seconds(self.data.stop),
+                _to_epoch_seconds(other.data.start),
+                _to_epoch_seconds(other.data.stop),
             )
             if len(res["start"]) == 0:
                 return None

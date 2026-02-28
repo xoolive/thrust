@@ -4,15 +4,10 @@ import {
   readJson,
 } from "./helpers";
 
-const AIRPORTS_DATASET = "e747ab91a11045e8b3f8a3efd093d3b5_0";
-const ATS_ROUTES_DATASET = "acf64966af5f48a1a40fdbcb31238ba7_0";
-const FIXES_DATASET = "861043a88ff4486c97c3789e7dcdccc6_0";
-const NAVAIDS_DATASET = "c9254c171b6741d3a5e494860761443a_0";
-
-const airportsPath = await ensureArcgisCacheFile("faa_airports.json", AIRPORTS_DATASET);
-const atsRoutesPath = await ensureArcgisCacheFile("faa_ats_routes.json", ATS_ROUTES_DATASET);
-const designatedPath = await ensureArcgisCacheFile("faa_designated_points.json", FIXES_DATASET);
-const navaidsPath = await ensureArcgisCacheFile("faa_navaid_components.json", NAVAIDS_DATASET);
+const airportsPath = await ensureArcgisCacheFile("faa_airports.json");
+const atsRoutesPath = await ensureArcgisCacheFile("faa_ats_routes.json");
+const designatedPath = await ensureArcgisCacheFile("faa_designated_points.json");
+const navaidsPath = await ensureArcgisCacheFile("faa_navaid_components.json");
 
 const collections = [
   readJson(airportsPath),
