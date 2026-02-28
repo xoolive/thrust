@@ -8,8 +8,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   CARGO_TARGET_DIR: ${{ github.workspace }}/target
-  FAA_CACHE_KEY: faa-data-${{ runner.os }}-${{ github.run_id }}
-  EUROCONTROL_CACHE_KEY: eurocontrol-data-${{ runner.os }}-${{ github.run_id }}
+  FAA_CACHE_KEY: faa-data-v1
+  EUROCONTROL_CACHE_KEY: eurocontrol-data-v1
 
 jobs:
   rust-core-build:
@@ -49,7 +49,15 @@ jobs:
       FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
     steps:
+      - name: Restore FAA cache
+        id: faa-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/thrust-faa
+          key: ${{ env.FAA_CACHE_KEY }}
+
       - name: Populate FAA cache files
+        if: steps.faa-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           ARCGIS_BASE="https://opendata.arcgis.com/datasets"
@@ -76,18 +84,20 @@ jobs:
           NASR_URL="https://nfdc.faa.gov/webContent/28DaySub/28DaySubscription_Effective_${NASR_EFFECTIVE}.zip"
           download_if_missing "$NASR_FILE" "$NASR_URL"
 
-      - name: Save FAA cache
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/thrust-faa
-          key: ${{ env.FAA_CACHE_KEY }}
-
   eurocontrol-cache-fill:
     runs-on: ubuntu-latest
     env:
       EUROCONTROL_CACHE_DIR: ~/.cache/thrust-eurocontrol
     steps:
+      - name: Restore Eurocontrol cache
+        id: eurocontrol-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/thrust-eurocontrol
+          key: ${{ env.EUROCONTROL_CACHE_KEY }}
+
       - name: Populate Eurocontrol cache folders
+        if: steps.eurocontrol-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           ROOT="$EUROCONTROL_CACHE_DIR"
@@ -132,12 +142,6 @@ jobs:
             fi
             cp -a "$DDR_SRC"/. "$ROOT/DDR/"
           fi
-
-      - name: Save Eurocontrol cache
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/thrust-eurocontrol
-          key: ${{ env.EUROCONTROL_CACHE_KEY }}
 
   rust-lint:
     runs-on: ubuntu-latest
