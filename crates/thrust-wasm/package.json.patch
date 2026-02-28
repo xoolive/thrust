@@ -1,6 +1,6 @@
 {
   "files": [
-    "readme.md",
+    "README.md",
     "esm/package.json",
     "esm/thrust_wasm_bg.wasm",
     "esm/thrust_wasm.js",
