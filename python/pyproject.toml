@@ -1,6 +1,7 @@
 [project]
 name = "thrust"
 requires-python = ">=3.10"
+readme = "readme.md"
 dependencies = ["pandas>=2.2.0"]
 classifiers = [
   "Programming Language :: Rust",

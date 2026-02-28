@@ -1,10 +1,46 @@
 # thrust
 
-thrust is the Python binding to the Rust version of the [traffic](https://github.com/xoolive/traffic) library. The name is a pun based on traffic and Rust, which relates well to the aviation world.
+`thrust` is the Python package exposing Rust-powered parsers and resolvers used
+by [`traffic`](https://github.com/xoolive/traffic).
 
-In practice, thrust has not been designed to be used as is: it is supposed to be a dependency for the Python traffic library, and is imported for optimized sections of the code.
+It is installable on its own, but its primary role is to provide optimized
+backends for `traffic`.
 
-Python version of traffic: <https://github.com/xoolive/traffic>  
-(Documentation at <https://traffic-viz.github.io>)
+## What it provides
 
-Rust version of traffic: <https://github.com/xoolive/thrust>
+- Field15 parsing and resolution helpers.
+- FAA sources (ArcGIS/NASR adapters).
+- EUROCONTROL AIXM and DDR source adapters.
+- Time/interval utilities backed by Rust extension functions.
+
+## Install (local editable)
+
+```bash
+cd python
+uv sync --dev
+```
+
+## Run tests
+
+```bash
+cd python
+uv run pytest tests
+```
+
+Some EUROCONTROL tests require local datasets via environment variables:
+
+- `THRUST_AIXM_PATH`
+- `THRUST_DDR_PATH`
+
+## Type/lint checks
+
+```bash
+cd python
+uv run ruff check .
+uv run ty check thrust tests thrust/core.pyi
+```
+
+## Related projects
+
+- Python orchestration layer: <https://github.com/xoolive/traffic>
+- Rust/WASM source repo: <https://github.com/xoolive/thrust>

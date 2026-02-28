@@ -5,6 +5,7 @@ edition = "2021"
 description = "WASM bindings for traffic-thrust core parsers"
 repository = "https://github.com/xoolive/thrust"
 license = "MIT"
+readme = "readme.md"
 
 [lib]
 crate-type = ["cdylib"]

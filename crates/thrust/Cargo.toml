@@ -3,6 +3,7 @@ name = "traffic-thrust"
 version = "0.1.0"
 edition = "2021"
 authors = ["Xavier Olive <git@xoolive.org>"]
+readme = "readme.md"
 
 [lib]
 name = "thrust"
@@ -29,7 +30,6 @@ zip = "7.0.0"
 [features]
 default = []
 net = ["dep:reqwest"]
-polars = ["dep:polars", "dep:ndarray-linalg", "dep:numpy"]
 rest = ["dep:warp", "dep:tokio", "dep:tracing-subscriber"]
 
 [dev-dependencies]
