@@ -1,0 +1,40 @@
+{
+  "files": [
+    "README.md",
+    "esm/package.json",
+    "esm/thrust_wasm_bg.wasm",
+    "esm/thrust_wasm.js",
+    "esm/thrust_wasm_bg.js",
+    "esm/thrust_wasm.d.ts",
+    "nodejs/package.json",
+    "nodejs/thrust_wasm_bg.wasm",
+    "nodejs/thrust_wasm.js",
+    "nodejs/thrust_wasm.d.ts",
+    "web/package.json",
+    "web/thrust_wasm_bg.wasm",
+    "web/thrust_wasm.js",
+    "web/thrust_wasm.d.ts"
+  ],
+  "sideEffects": [
+    "./esm/thrust_wasm.js",
+    "./esm/snippets/*",
+    "./web/snippets/*"
+  ],
+  "module": "esm/thrust_wasm.js",
+  "types": "esm/thrust_wasm.d.ts",
+  "exports": {
+    ".": {
+      "import": "./esm/thrust_wasm.js",
+      "types": "./esm/thrust_wasm.d.ts"
+    },
+    "./nodejs": {
+      "require": "./nodejs/thrust_wasm.js",
+      "import": "./nodejs/thrust_wasm.js",
+      "types": "./nodejs/thrust_wasm.d.ts"
+    },
+    "./web": {
+      "import": "./web/thrust_wasm.js",
+      "types": "./web/thrust_wasm.d.ts"
+    }
+  }
+}
