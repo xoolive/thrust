@@ -9,20 +9,28 @@ from thrust.airways import AixmAirwaysSource, DdrAirwaysSource
 from thrust.navpoints import AixmNavpointsSource, DdrNavpointsSource
 
 
-def _aixm_path() -> Path | None:
+def _aixm_path() -> Path:
     value = os.getenv("THRUST_AIXM_PATH")
-    return Path(value) if value else None
+    assert value is not None, (
+        "THRUST_AIXM_PATH must be set for Eurocontrol tests"
+    )
+    path = Path(value)
+    assert path.exists(), f"THRUST_AIXM_PATH does not exist: {path}"
+    return path
 
 
-def _ddr_path() -> Path | None:
+def _ddr_path() -> Path:
     value = os.getenv("THRUST_DDR_PATH")
-    return Path(value) if value else None
+    assert value is not None, (
+        "THRUST_DDR_PATH must be set for Eurocontrol tests"
+    )
+    path = Path(value)
+    assert path.exists(), f"THRUST_DDR_PATH does not exist: {path}"
+    return path
 
 
 def test_aixm_sources_parse_when_folder_available() -> None:
     path = _aixm_path()
-    if path is None or not path.exists():
-        return
 
     airports = AixmAirportsSource(path).list_airports()
     navpoint_src = AixmNavpointsSource(path)
@@ -48,7 +56,10 @@ def test_aixm_sources_parse_when_folder_available() -> None:
     assert len(lszh) >= 1
     assert any("ZURICH" in str(row.name or "").upper() for row in lszh)
 
-    assert len(navpoint_src.resolve_point("NARAK", "fix")) >= 1
+    # Depending on DDR cycle/source typing, NARAK can be exposed as FIX or NAVAID.
+    narak_fix = navpoint_src.resolve_point("NARAK", "fix")
+    narak_navaid = navpoint_src.resolve_point("NARAK", "navaid")
+    assert len(narak_fix) + len(narak_navaid) >= 1
     gai = navpoint_src.resolve_point("GAI", "navaid")
     tou = navpoint_src.resolve_point("TOU", "navaid")
     assert len(gai) >= 1
@@ -60,8 +71,6 @@ def test_aixm_sources_parse_when_folder_available() -> None:
 
 def test_ddr_sources_parse_when_folder_available() -> None:
     path = _ddr_path()
-    if path is None or not path.exists():
-        return
 
     airports = DdrAirportsSource(path).list_airports()
     navpoint_src = DdrNavpointsSource(path)
@@ -79,7 +88,9 @@ def test_ddr_sources_parse_when_folder_available() -> None:
     for code in ["EHAM", "LSZH", "LFCL", "LFCX"]:
         assert code in airport_codes
 
-    assert len(navpoint_src.resolve_point("NARAK", "fix")) >= 1
+    narak_fix = navpoint_src.resolve_point("NARAK", "fix")
+    narak_navaid = navpoint_src.resolve_point("NARAK", "navaid")
+    assert len(narak_fix) + len(narak_navaid) >= 1
     assert len(navpoint_src.resolve_point("GAI", "navaid")) >= 1
     assert len(navpoint_src.resolve_point("TOU", "navaid")) >= 1
     assert len(DdrAirwaysSource(path).resolve_airway("UM605")) >= 1

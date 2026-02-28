@@ -66,7 +66,7 @@ function assertCoreEurocontrolEntities(
 
 const inputs = loadEurocontrolInputs();
 if (!inputs) {
-  console.log("eurocontrol.spec.ts skipped (THRUST_AIXM_PATH/THRUST_DDR_PATH not available)");
+  throw new Error("THRUST_AIXM_PATH/THRUST_DDR_PATH data is required for eurocontrol.spec.ts");
 } else {
   const wasmModule = await loadWasmModule();
   const aixmResolver = new wasmModule.EurocontrolResolver(inputs.aixmFolder);

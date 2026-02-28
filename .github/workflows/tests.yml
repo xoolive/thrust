@@ -8,6 +8,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   CARGO_TARGET_DIR: ${{ github.workspace }}/target
+  FAA_CACHE_KEY: faa-data-${{ runner.os }}-${{ github.run_id }}
+  EUROCONTROL_CACHE_KEY: eurocontrol-data-${{ runner.os }}-${{ github.run_id }}
 
 jobs:
   rust-core-build:
@@ -40,6 +42,102 @@ jobs:
             ~/.cargo/git
             ${{ github.workspace }}/target
           key: rust-build-${{ runner.os }}-${{ github.sha }}
+
+  faa-cache-fill:
+    runs-on: ubuntu-latest
+    env:
+      FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
+      FAA_NASR_AIRAC: "2508"
+    steps:
+      - name: Populate FAA cache files
+        run: |
+          set -euo pipefail
+          ARCGIS_BASE="https://opendata.arcgis.com/datasets"
+          mkdir -p "$FAA_TEST_DATA_DIR/arcgis" "$FAA_TEST_DATA_DIR/nasr"
+
+          download_if_missing () {
+            target="$1"
+            url="$2"
+            if [ -s "$target" ]; then
+              return
+            fi
+            tmp="${target}.tmp"
+            curl -fL --retry 8 --retry-all-errors --connect-timeout 30 --max-time 300 -o "$tmp" "$url"
+            mv "$tmp" "$target"
+          }
+
+          download_if_missing "$FAA_TEST_DATA_DIR/arcgis/faa_airports.json" "$ARCGIS_BASE/e747ab91a11045e8b3f8a3efd093d3b5_0.geojson"
+          download_if_missing "$FAA_TEST_DATA_DIR/arcgis/faa_ats_routes.json" "$ARCGIS_BASE/acf64966af5f48a1a40fdbcb31238ba7_0.geojson"
+          download_if_missing "$FAA_TEST_DATA_DIR/arcgis/faa_designated_points.json" "$ARCGIS_BASE/861043a88ff4486c97c3789e7dcdccc6_0.geojson"
+          download_if_missing "$FAA_TEST_DATA_DIR/arcgis/faa_navaid_components.json" "$ARCGIS_BASE/c9254c171b6741d3a5e494860761443a_0.geojson"
+
+          NASR_EFFECTIVE=$(python -c 'import datetime as dt; code="2508"; yy=int(code[:2]); cycle=int(code[2:]); epoch=dt.date(1998,1,29); year=2000+yy; jan1=dt.date(year,1,1); extra=((jan1-epoch).days%28+28)%28; year_epoch=jan1-dt.timedelta(days=(extra-28)); print((year_epoch+dt.timedelta(days=(cycle-1)*28)).isoformat())')
+          NASR_FILE="$FAA_TEST_DATA_DIR/nasr/28DaySubscription_Effective_${NASR_EFFECTIVE}.zip"
+          NASR_URL="https://nfdc.faa.gov/webContent/28DaySub/28DaySubscription_Effective_${NASR_EFFECTIVE}.zip"
+          download_if_missing "$NASR_FILE" "$NASR_URL"
+
+      - name: Save FAA cache
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/thrust-faa
+          key: ${{ env.FAA_CACHE_KEY }}
+
+  eurocontrol-cache-fill:
+    runs-on: ubuntu-latest
+    env:
+      EUROCONTROL_CACHE_DIR: ~/.cache/thrust-eurocontrol
+    steps:
+      - name: Populate Eurocontrol cache folders
+        run: |
+          set -euo pipefail
+          ROOT="$EUROCONTROL_CACHE_DIR"
+          mkdir -p "$ROOT"
+
+          download_if_missing () {
+            target="$1"
+            url="$2"
+            if [ -s "$target" ]; then
+              return
+            fi
+            tmp="${target}.tmp"
+            curl -fL --retry 8 --retry-all-errors --connect-timeout 30 --max-time 300 -o "$tmp" "$url"
+            mv "$tmp" "$target"
+          }
+
+          AIXM_ZIP="$ROOT/aixm_2413.zip"
+          DDR_ZIP="$ROOT/ddr_2111.zip"
+          download_if_missing "$AIXM_ZIP" "https://www.dropbox.com/scl/fo/bwsaaoaj5jvhu1h3vhs7n/AH4x2Yx1cR8AmMIt90A8prk?rlkey=z20d7taw4l6inphiat0jbhgie&dl=1"
+          download_if_missing "$DDR_ZIP" "https://www.dropbox.com/scl/fo/5wnsn1kh10obwedzxxa17/APiyJ0IzO8i9wVlP7YRGWyU?rlkey=3vnhvhs3i2bpt8ebg47m74veb&st=0db2doel&dl=1"
+
+          if [ ! -f "$ROOT/AIXM/AirportHeliport.BASELINE.zip" ]; then
+            rm -rf "$ROOT/AIXM" "$ROOT/aixm_extract"
+            mkdir -p "$ROOT/AIXM" "$ROOT/aixm_extract"
+            python -c 'import pathlib,sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); root=pathlib.Path(sys.argv[2]); [((root/n).parent.mkdir(parents=True, exist_ok=True), (None if i.is_dir() else (root/n).write_bytes(z.read(i)))) for i in z.infolist() for n in [i.filename.lstrip("/")] if n]' "$AIXM_ZIP" "$ROOT/aixm_extract"
+            AIXM_SRC=$(python -c 'import pathlib,sys; root=pathlib.Path(sys.argv[1]); marker=sys.argv[2]; c=([root] if (root/marker).is_file() else []) + [p for p in root.rglob("*") if p.is_dir() and (p/marker).is_file()]; print(c[0] if c else "")' "$ROOT/aixm_extract" "AirportHeliport.BASELINE.zip")
+            if [ -z "$AIXM_SRC" ]; then
+              echo "AIXM marker file not found" >&2
+              exit 1
+            fi
+            cp -a "$AIXM_SRC"/. "$ROOT/AIXM/"
+          fi
+
+          if [ ! -d "$ROOT/DDR" ] || [ -z "$(ls -A "$ROOT/DDR" 2>/dev/null || true)" ]; then
+            rm -rf "$ROOT/DDR" "$ROOT/ddr_extract"
+            mkdir -p "$ROOT/DDR" "$ROOT/ddr_extract"
+            python -c 'import pathlib,sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); root=pathlib.Path(sys.argv[2]); [((root/n).parent.mkdir(parents=True, exist_ok=True), (None if i.is_dir() else (root/n).write_bytes(z.read(i)))) for i in z.infolist() for n in [i.filename.lstrip("/")] if n]' "$DDR_ZIP" "$ROOT/ddr_extract"
+            DDR_SRC=$(python -c 'import pathlib,sys; root=pathlib.Path(sys.argv[1]); c=([root] if any(root.glob("*.nnpt")) and any(root.glob("*.routes")) and any(root.glob("*.arp")) else []) + [p for p in root.rglob("*") if p.is_dir() and any(p.glob("*.nnpt")) and any(p.glob("*.routes")) and any(p.glob("*.arp"))]; print(c[0] if c else "")' "$ROOT/ddr_extract")
+            if [ -z "$DDR_SRC" ]; then
+              echo "DDR marker files not found" >&2
+              exit 1
+            fi
+            cp -a "$DDR_SRC"/. "$ROOT/DDR/"
+          fi
+
+      - name: Save Eurocontrol cache
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/thrust-eurocontrol
+          key: ${{ env.EUROCONTROL_CACHE_KEY }}
 
   rust-lint:
     runs-on: ubuntu-latest
@@ -74,10 +172,12 @@ jobs:
 
   rust-test:
     runs-on: ubuntu-latest
-    needs: [rust-core-build]
+    needs: [rust-core-build, faa-cache-fill, eurocontrol-cache-fill]
     env:
       FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
+      THRUST_AIXM_PATH: ~/.cache/thrust-eurocontrol/AIXM
+      THRUST_DDR_PATH: ~/.cache/thrust-eurocontrol/DDR
     steps:
       - uses: actions/checkout@v6
         with:
@@ -96,10 +196,16 @@ jobs:
           key: rust-build-${{ runner.os }}-${{ github.sha }}
 
       - name: Restore FAA test data cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/thrust-faa
-          key: faa-data-${{ runner.os }}-v1
+          key: ${{ env.FAA_CACHE_KEY }}
+
+      - name: Restore Eurocontrol data cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/thrust-eurocontrol
+          key: ${{ env.EUROCONTROL_CACHE_KEY }}
 
       - name: Rust tests
         run: cargo test --workspace --all-targets
@@ -148,10 +254,12 @@ jobs:
 
   python-test:
     runs-on: ubuntu-latest
-    needs: [rust-core-build]
+    needs: [rust-core-build, faa-cache-fill, eurocontrol-cache-fill]
     env:
       FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
+      THRUST_AIXM_PATH: ~/.cache/thrust-eurocontrol/AIXM
+      THRUST_DDR_PATH: ~/.cache/thrust-eurocontrol/DDR
     defaults:
       run:
         working-directory: python
@@ -177,10 +285,16 @@ jobs:
           key: rust-build-${{ runner.os }}-${{ github.sha }}
 
       - name: Restore FAA test data cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/thrust-faa
-          key: faa-data-${{ runner.os }}-v1
+          key: ${{ env.FAA_CACHE_KEY }}
+
+      - name: Restore Eurocontrol data cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/thrust-eurocontrol
+          key: ${{ env.EUROCONTROL_CACHE_KEY }}
 
       - name: Install dependencies
         run: uv sync --dev
@@ -243,20 +357,28 @@ jobs:
 
   wasm-test:
     runs-on: ubuntu-latest
-    needs: [rust-core-build]
+    needs: [rust-core-build, faa-cache-fill, eurocontrol-cache-fill]
     env:
       FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
+      THRUST_AIXM_PATH: ~/.cache/thrust-eurocontrol/AIXM
+      THRUST_DDR_PATH: ~/.cache/thrust-eurocontrol/DDR
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
       - name: Restore FAA test data cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/thrust-faa
-          key: faa-data-${{ runner.os }}-v1
+          key: ${{ env.FAA_CACHE_KEY }}
+
+      - name: Restore Eurocontrol data cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/thrust-eurocontrol
+          key: ${{ env.EUROCONTROL_CACHE_KEY }}
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
