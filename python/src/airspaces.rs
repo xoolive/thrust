@@ -2,9 +2,7 @@ use pyo3::{exceptions::PyOSError, prelude::*, types::PyDict};
 use serde_json::Value;
 use std::path::PathBuf;
 use thrust::data::eurocontrol::aixm::airspace::parse_airspace_zip_file;
-use thrust::data::eurocontrol::ddr::airspaces::{
-    find_file_with_prefix_suffix, parse_are_file, parse_sls_file, DdrSectorLayer,
-};
+use thrust::data::eurocontrol::ddr::airspaces::{parse_fra_layers_path, parse_sector_layers_path, DdrSectorLayer};
 use thrust::data::faa::arcgis::{
     parse_faa_airspace_boundary, parse_faa_class_airspace, parse_faa_prohibited_airspace, parse_faa_route_airspace,
     parse_faa_special_use_airspace, FaaFeature,
@@ -154,14 +152,7 @@ pub struct DdrFraAirspacesSource {
 impl DdrFraAirspacesSource {
     #[new]
     fn new(path: PathBuf) -> PyResult<Self> {
-        let root = path.as_path();
-        let are = find_file_with_prefix_suffix(root, "Free_Route_", ".are")
-            .ok_or_else(|| PyOSError::new_err("Unable to find Free_Route_*.are"))?;
-        let sls = find_file_with_prefix_suffix(root, "Free_Route_", ".sls")
-            .ok_or_else(|| PyOSError::new_err("Unable to find Free_Route_*.sls"))?;
-
-        let polygons = parse_are_file(are).map_err(|e| PyOSError::new_err(e.to_string()))?;
-        let layers = parse_sls_file(sls, &polygons).map_err(|e| PyOSError::new_err(e.to_string()))?;
+        let layers = parse_fra_layers_path(path).map_err(|e| PyOSError::new_err(e.to_string()))?;
 
         let airspaces = layers
             .into_iter()
@@ -197,15 +188,7 @@ impl DdrFraAirspacesSource {
 impl DdrAirspacesSource {
     #[new]
     fn new(path: PathBuf) -> PyResult<Self> {
-        let root = path.as_path();
-
-        let are = find_file_with_prefix_suffix(root, "Sectors_", ".are")
-            .ok_or_else(|| PyOSError::new_err("Unable to find Sectors_*.are"))?;
-        let sls = find_file_with_prefix_suffix(root, "Sectors_", ".sls")
-            .ok_or_else(|| PyOSError::new_err("Unable to find Sectors_*.sls"))?;
-
-        let polygons = parse_are_file(are).map_err(|e| PyOSError::new_err(e.to_string()))?;
-        let layers = parse_sls_file(sls, &polygons).map_err(|e| PyOSError::new_err(e.to_string()))?;
+        let layers = parse_sector_layers_path(path).map_err(|e| PyOSError::new_err(e.to_string()))?;
 
         let airspaces = layers
             .into_iter()

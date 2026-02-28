@@ -615,6 +615,114 @@ fn parse_ddr_airways(text: &str, point_lookup: &HashMap<String, (f64, f64, Strin
     out
 }
 
+fn file_basename(name: &str) -> &str {
+    name.rsplit('/').next().unwrap_or(name)
+}
+
+fn find_zip_text_entry(ddr_archive: &[u8], predicate: impl Fn(&str) -> bool) -> Result<String, JsValue> {
+    let mut archive = ZipArchive::new(Cursor::new(ddr_archive))
+        .map_err(|e| JsValue::from_str(&format!("invalid DDR zip archive: {e}")))?;
+    for idx in 0..archive.len() {
+        let mut entry = archive
+            .by_index(idx)
+            .map_err(|e| JsValue::from_str(&format!("unable to read DDR zip entry: {e}")))?;
+        if entry.is_dir() {
+            continue;
+        }
+        let name = file_basename(entry.name()).to_string();
+        if !predicate(&name) {
+            continue;
+        }
+        let mut text = String::new();
+        entry
+            .read_to_string(&mut text)
+            .map_err(|e| JsValue::from_str(&format!("unable to decode DDR entry '{name}' as UTF-8 text: {e}")))?;
+        return Ok(text);
+    }
+    Err(JsValue::from_str("matching DDR file not found in archive"))
+}
+
+fn ddr_file_key_and_matchers() -> [(&'static str, fn(&str) -> bool); 8] {
+    [
+        ("navpoints.nnpt", |name: &str| {
+            let lower = name.to_ascii_lowercase();
+            lower.starts_with("airac_") && lower.ends_with(".nnpt")
+        }),
+        ("routes.routes", |name: &str| {
+            let lower = name.to_ascii_lowercase();
+            lower.starts_with("airac_") && lower.ends_with(".routes")
+        }),
+        ("airports.arp", |name: &str| {
+            let lower = name.to_ascii_lowercase();
+            lower.starts_with("vst_") && lower.ends_with("_airports.arp")
+        }),
+        ("sectors.are", |name: &str| {
+            let lower = name.to_ascii_lowercase();
+            lower.starts_with("sectors_") && lower.ends_with(".are")
+        }),
+        ("sectors.sls", |name: &str| {
+            let lower = name.to_ascii_lowercase();
+            lower.starts_with("sectors_") && lower.ends_with(".sls")
+        }),
+        ("free_route.are", |name: &str| {
+            let lower = name.to_ascii_lowercase();
+            lower.starts_with("free_route_") && lower.ends_with(".are")
+        }),
+        ("free_route.sls", |name: &str| {
+            let lower = name.to_ascii_lowercase();
+            lower.starts_with("free_route_") && lower.ends_with(".sls")
+        }),
+        ("free_route.frp", |name: &str| {
+            let lower = name.to_ascii_lowercase();
+            lower.starts_with("free_route_") && lower.ends_with(".frp")
+        }),
+    ]
+}
+
+fn build_from_ddr_text_files(files: HashMap<String, String>) -> Result<EurocontrolResolver, JsValue> {
+    for name in DDR_EXPECTED_FILES {
+        if !files.contains_key(name) {
+            return Err(JsValue::from_str(&format!(
+                "missing DDR file '{name}' in dataset payload"
+            )));
+        }
+    }
+
+    let mut fixes = Vec::new();
+    let mut navaids = Vec::new();
+
+    let ddr_points = parse_ddr_navpoints(
+        files
+            .get("navpoints.nnpt")
+            .ok_or_else(|| JsValue::from_str("missing navpoints.nnpt"))?,
+    );
+    for p in &ddr_points {
+        if p.kind == "fix" {
+            fixes.push(p.clone());
+        } else {
+            navaids.push(p.clone());
+        }
+    }
+
+    let airports = parse_ddr_airports(
+        files
+            .get("airports.arp")
+            .ok_or_else(|| JsValue::from_str("missing airports.arp"))?,
+    );
+    let mut point_lookup: HashMap<String, (f64, f64, String)> = HashMap::new();
+    for p in &ddr_points {
+        point_lookup.insert(p.code.clone(), (p.latitude, p.longitude, p.kind.clone()));
+    }
+    let airways = parse_ddr_airways(
+        files
+            .get("routes.routes")
+            .ok_or_else(|| JsValue::from_str("missing routes.routes"))?,
+        &point_lookup,
+    );
+
+    EurocontrolResolver::build(airports, fixes, navaids, airways)
+}
+
 #[wasm_bindgen]
 pub struct EurocontrolResolver {
     airports: Vec<AirportRecord>,
@@ -679,50 +787,18 @@ impl EurocontrolResolver {
     pub fn from_ddr_folder(ddr_folder: JsValue) -> Result<EurocontrolResolver, JsValue> {
         let files: HashMap<String, String> =
             serde_wasm_bindgen::from_value(ddr_folder).map_err(|e| JsValue::from_str(&e.to_string()))?;
-        for name in DDR_EXPECTED_FILES {
-            if !files.contains_key(name) {
-                return Err(JsValue::from_str(&format!(
-                    "missing DDR file '{name}' in dataset folder payload"
-                )));
-            }
+        build_from_ddr_text_files(files)
+    }
+
+    #[wasm_bindgen(js_name = fromDdrArchive)]
+    pub fn from_ddr_archive(ddr_archive: Vec<u8>) -> Result<EurocontrolResolver, JsValue> {
+        let mut files: HashMap<String, String> = HashMap::new();
+        for (key, matcher) in ddr_file_key_and_matchers() {
+            let text = find_zip_text_entry(&ddr_archive, matcher)
+                .map_err(|_| JsValue::from_str(&format!("missing DDR file for key '{key}' in archive payload")))?;
+            files.insert(key.to_string(), text);
         }
-
-        let mut fixes = Vec::new();
-        let mut navaids = Vec::new();
-
-        let ddr_points = parse_ddr_navpoints(
-            files
-                .get("navpoints.nnpt")
-                .ok_or_else(|| JsValue::from_str("missing navpoints.nnpt"))?,
-        );
-        for p in &ddr_points {
-            if p.kind == "fix" {
-                fixes.push(p.clone());
-            } else {
-                navaids.push(p.clone());
-            }
-        }
-
-        let airports = parse_ddr_airports(
-            files
-                .get("airports.arp")
-                .ok_or_else(|| JsValue::from_str("missing airports.arp"))?,
-        );
-        let mut point_lookup: HashMap<String, (f64, f64, String)> = HashMap::new();
-        for p in &ddr_points {
-            point_lookup.insert(p.code.clone(), (p.latitude, p.longitude, p.kind.clone()));
-        }
-        let airways = parse_ddr_airways(
-            files
-                .get("routes.routes")
-                .ok_or_else(|| JsValue::from_str("missing routes.routes"))?,
-            &point_lookup,
-        );
-
-        // Other DDR files are validated at input boundary so callers pass a complete
-        // dataset folder; current resolver logic only consumes navpoints/routes/airports.
-
-        Self::build(airports, fixes, navaids, airways)
+        build_from_ddr_text_files(files)
     }
 
     fn build(

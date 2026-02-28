@@ -13,8 +13,8 @@ use thrust::data::eurocontrol::aixm::airport_heliport::parse_airport_heliport_zi
 use thrust::data::eurocontrol::aixm::designated_point::parse_designated_point_zip_file;
 use thrust::data::eurocontrol::aixm::navaid::parse_navaid_zip_file;
 use thrust::data::eurocontrol::database::{AirwayDatabase, ResolvedRoute};
-use thrust::data::eurocontrol::ddr::navpoints::parse_navpoints_dir;
-use thrust::data::eurocontrol::ddr::routes::parse_routes_dir;
+use thrust::data::eurocontrol::ddr::navpoints::parse_navpoints_path;
+use thrust::data::eurocontrol::ddr::routes::parse_routes_path;
 use thrust::data::faa::nasr::parse_field15_data_from_nasr_bytes;
 
 const FAA_ARCGIS_BASE: &str = "https://opendata.arcgis.com/datasets";
@@ -217,8 +217,8 @@ fn eurocontrol_entities_are_resolvable_when_paths_are_set() {
     if let Ok(ddr_raw) = env::var("THRUST_DDR_PATH") {
         let ddr_path = PathBuf::from(ddr_raw);
         if ddr_path.exists() {
-            let ddr_navpoints = parse_navpoints_dir(&ddr_path).expect("unable to parse DDR navpoints");
-            let ddr_routes = parse_routes_dir(&ddr_path).expect("unable to parse DDR routes");
+            let ddr_navpoints = parse_navpoints_path(&ddr_path).expect("unable to parse DDR navpoints");
+            let ddr_routes = parse_routes_path(&ddr_path).expect("unable to parse DDR routes");
             assert!(
                 ddr_navpoints.iter().any(|p| p.name.eq_ignore_ascii_case("NARAK")),
                 "missing DDR navpoint NARAK"

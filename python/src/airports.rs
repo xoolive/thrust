@@ -1,9 +1,9 @@
 use pyo3::{exceptions::PyOSError, prelude::*, types::PyDict};
 use serde_json::Value;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use thrust::data::eurocontrol::aixm::airport_heliport::parse_airport_heliport_zip_file;
+use thrust::data::eurocontrol::ddr::airports::parse_airports_path;
 use thrust::data::faa::nasr::parse_field15_data_from_nasr_zip;
 
 #[pyclass(get_all)]
@@ -193,51 +193,21 @@ pub struct DdrAirportsSource {
 impl DdrAirportsSource {
     #[new]
     fn new(path: PathBuf) -> PyResult<Self> {
-        let root = path.as_path();
-        let file = std::fs::read_dir(root)
-            .map_err(|e| PyOSError::new_err(e.to_string()))?
-            .flatten()
-            .map(|e| e.path())
-            .find(|p| {
-                p.file_name()
-                    .and_then(|s| s.to_str())
-                    .is_some_and(|n| n.starts_with("VST_") && n.ends_with("_Airports.arp"))
-            })
-            .ok_or_else(|| PyOSError::new_err("Unable to find VST_*_Airports.arp"))?;
-
-        let fh = File::open(file).map_err(|e| PyOSError::new_err(e.to_string()))?;
-        let reader = BufReader::new(fh);
-
-        let mut airports = Vec::new();
-        for line in reader.lines() {
-            let line = line.map_err(|e| PyOSError::new_err(e.to_string()))?;
-            let parts = line.split_whitespace().collect::<Vec<_>>();
-            if parts.len() < 3 {
-                continue;
-            }
-            let code = parts[0].trim().to_uppercase();
-            if code.len() != 4 {
-                continue;
-            }
-            let lat_raw = parts[1].parse::<f64>().ok();
-            let lon_raw = parts[2].parse::<f64>().ok();
-            let (lat_raw, lon_raw) = match (lat_raw, lon_raw) {
-                (Some(a), Some(b)) => (a, b),
-                _ => continue,
-            };
-
-            airports.push(AirportRecord {
-                code: code.clone(),
-                latitude: lat_raw / 100.0,
-                longitude: lon_raw / 100.0,
+        let parsed = parse_airports_path(path).map_err(|e| PyOSError::new_err(e.to_string()))?;
+        let airports = parsed
+            .into_iter()
+            .map(|airport| AirportRecord {
+                code: airport.code.clone(),
+                latitude: airport.latitude,
+                longitude: airport.longitude,
                 altitude: None,
                 iata: None,
-                icao: Some(code),
+                icao: Some(airport.code),
                 name: None,
                 country: None,
                 source: "eurocontrol_ddr".to_string(),
-            });
-        }
+            })
+            .collect();
 
         Ok(Self { airports })
     }

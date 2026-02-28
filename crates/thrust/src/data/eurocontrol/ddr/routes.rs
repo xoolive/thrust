@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Cursor};
 use std::path::{Path, PathBuf};
 
-use super::navpoints::{find_navpoints_file, parse_navpoints_file, DdrNavPoint};
+use super::navpoints::{find_navpoints_file, parse_navpoints_bytes, parse_navpoints_file, DdrNavPoint};
+use super::{file_name_matches, read_first_zip_entry_bytes};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DdrRoutePoint {
@@ -32,17 +33,55 @@ pub fn parse_routes_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<DdrRoutePoint>, Bo
     parse_routes_file(route_file, &navpoints)
 }
 
+pub fn parse_routes_path<P: AsRef<Path>>(path: P) -> Result<Vec<DdrRoutePoint>, Box<dyn std::error::Error>> {
+    let path = path.as_ref();
+    if path.is_dir() {
+        return parse_routes_dir(path);
+    }
+    if path
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+    {
+        return parse_routes_zip(path);
+    }
+    Err("DDR routes path must be a folder or a zip archive".into())
+}
+
+pub fn parse_routes_zip<P: AsRef<Path>>(zip_path: P) -> Result<Vec<DdrRoutePoint>, Box<dyn std::error::Error>> {
+    let nav_bytes =
+        read_first_zip_entry_bytes(&zip_path, |entry_name| file_name_matches(entry_name, "AIRAC_", ".nnpt"))?;
+    let route_bytes = read_first_zip_entry_bytes(&zip_path, |entry_name| {
+        file_name_matches(entry_name, "AIRAC_", ".routes")
+    })?;
+    let navpoints = parse_navpoints_bytes(&nav_bytes)?;
+    parse_routes_bytes(&route_bytes, &navpoints)
+}
+
 pub fn parse_routes_file<P: AsRef<Path>>(
     path: P,
+    navpoints: &[DdrNavPoint],
+) -> Result<Vec<DdrRoutePoint>, Box<dyn std::error::Error>> {
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+    parse_routes_reader(reader, navpoints)
+}
+
+pub(crate) fn parse_routes_bytes(
+    bytes: &[u8],
+    navpoints: &[DdrNavPoint],
+) -> Result<Vec<DdrRoutePoint>, Box<dyn std::error::Error>> {
+    parse_routes_reader(BufReader::new(Cursor::new(bytes)), navpoints)
+}
+
+fn parse_routes_reader<R: BufRead>(
+    reader: R,
     navpoints: &[DdrNavPoint],
 ) -> Result<Vec<DdrRoutePoint>, Box<dyn std::error::Error>> {
     let nav_index: HashMap<String, (f64, f64)> = navpoints
         .iter()
         .map(|p| (p.name.to_uppercase(), (p.latitude, p.longitude)))
         .collect();
-
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
     let mut result = Vec::new();
 
     for line in reader.lines() {

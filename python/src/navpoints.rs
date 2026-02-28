@@ -4,7 +4,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use thrust::data::eurocontrol::aixm::designated_point::parse_designated_point_zip_file;
 use thrust::data::eurocontrol::aixm::navaid::parse_navaid_zip_file;
-use thrust::data::eurocontrol::ddr::navpoints::parse_navpoints_dir;
+use thrust::data::eurocontrol::ddr::navpoints::parse_navpoints_path;
 use thrust::data::faa::nasr::parse_field15_data_from_nasr_zip;
 
 #[pyclass(get_all)]
@@ -321,7 +321,7 @@ pub struct DdrNavpointsSource {
 impl DdrNavpointsSource {
     #[new]
     fn new(path: PathBuf) -> PyResult<Self> {
-        let parsed = parse_navpoints_dir(path).map_err(|e| PyOSError::new_err(e.to_string()))?;
+        let parsed = parse_navpoints_path(path).map_err(|e| PyOSError::new_err(e.to_string()))?;
         let points = parsed
             .into_iter()
             .map(|point| {

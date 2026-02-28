@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::fs::File;
 use std::path::PathBuf;
 use thrust::data::eurocontrol::database::{AirwayDatabase, ResolvedPoint, ResolvedRoute};
-use thrust::data::eurocontrol::ddr::routes::parse_routes_dir;
+use thrust::data::eurocontrol::ddr::routes::parse_routes_path;
 use thrust::data::faa::nasr::parse_field15_data_from_nasr_zip;
 
 fn normalize_name(value: &str) -> String {
@@ -347,7 +347,7 @@ pub struct DdrAirwaysSource {
 impl DdrAirwaysSource {
     #[new]
     fn new(path: PathBuf) -> PyResult<Self> {
-        let parsed = parse_routes_dir(path).map_err(|e| PyOSError::new_err(e.to_string()))?;
+        let parsed = parse_routes_path(path).map_err(|e| PyOSError::new_err(e.to_string()))?;
         let mut by_name: std::collections::HashMap<String, Vec<AirwayPointRecord>> = std::collections::HashMap::new();
 
         for point in parsed {

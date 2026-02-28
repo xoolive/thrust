@@ -70,7 +70,9 @@ if (!inputs) {
 } else {
   const wasmModule = await loadWasmModule();
   const aixmResolver = new wasmModule.EurocontrolResolver(inputs.aixmFolder);
-  const ddrResolver = wasmModule.EurocontrolResolver.fromDdrFolder(inputs.ddrFolder);
+  const ddrResolver = inputs.ddrArchive
+    ? wasmModule.EurocontrolResolver.fromDdrArchive(inputs.ddrArchive)
+    : wasmModule.EurocontrolResolver.fromDdrFolder(inputs.ddrFolder!);
 
   // DDR .arp inputs do not carry airport names, so name assertions are AIXM-only.
   assertCoreEurocontrolEntities(aixmResolver, "AIXM", { checkAirportNames: true });

@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -296,7 +296,8 @@ function firstMatchingFile(dir: string, predicate: (name: string) => boolean): s
 
 export type EurocontrolInputs = {
   aixmFolder: Record<string, Uint8Array>;
-  ddrFolder: Record<string, string>;
+  ddrFolder?: Record<string, string>;
+  ddrArchive?: Uint8Array;
 };
 
 export function loadEurocontrolInputs(): EurocontrolInputs | null {
@@ -331,25 +332,43 @@ export function loadEurocontrolInputs(): EurocontrolInputs | null {
     return null;
   }
 
-  const navpointsPath = firstMatchingFile(ddrRoot, (name) => name.startsWith("AIRAC_") && name.endsWith(".nnpt"));
-  const routesPath = firstMatchingFile(ddrRoot, (name) => name.startsWith("AIRAC_") && name.endsWith(".routes"));
-  const airportsPath = firstMatchingFile(ddrRoot, (name) => name.startsWith("VST_") && name.endsWith("_Airports.arp"));
-  const sectorsArePath = firstMatchingFile(ddrRoot, (name) => name.startsWith("Sectors_") && name.endsWith(".are"));
-  const sectorsSlsPath = firstMatchingFile(ddrRoot, (name) => name.startsWith("Sectors_") && name.endsWith(".sls"));
-  const freeRouteArePath = firstMatchingFile(ddrRoot, (name) => name.startsWith("Free_Route_") && name.endsWith(".are"));
-  const freeRouteSlsPath = firstMatchingFile(ddrRoot, (name) => name.startsWith("Free_Route_") && name.endsWith(".sls"));
-  const freeRouteFrpPath = firstMatchingFile(ddrRoot, (name) => name.startsWith("Free_Route_") && name.endsWith(".frp"));
-  if (
-    !navpointsPath ||
-    !routesPath ||
-    !airportsPath ||
-    !sectorsArePath ||
-    !sectorsSlsPath ||
-    !freeRouteArePath ||
-    !freeRouteSlsPath ||
-    !freeRouteFrpPath
-  ) {
-    return null;
+  let ddrFolder: Record<string, string> | undefined;
+  let ddrArchive: Uint8Array | undefined;
+
+  const ddrStats = statSync(ddrRoot);
+  if (ddrStats.isFile()) {
+    ddrArchive = new Uint8Array(readFileSync(ddrRoot));
+  } else {
+    const navpointsPath = firstMatchingFile(ddrRoot, (name) => name.startsWith("AIRAC_") && name.endsWith(".nnpt"));
+    const routesPath = firstMatchingFile(ddrRoot, (name) => name.startsWith("AIRAC_") && name.endsWith(".routes"));
+    const airportsPath = firstMatchingFile(ddrRoot, (name) => name.startsWith("VST_") && name.endsWith("_Airports.arp"));
+    const sectorsArePath = firstMatchingFile(ddrRoot, (name) => name.startsWith("Sectors_") && name.endsWith(".are"));
+    const sectorsSlsPath = firstMatchingFile(ddrRoot, (name) => name.startsWith("Sectors_") && name.endsWith(".sls"));
+    const freeRouteArePath = firstMatchingFile(ddrRoot, (name) => name.startsWith("Free_Route_") && name.endsWith(".are"));
+    const freeRouteSlsPath = firstMatchingFile(ddrRoot, (name) => name.startsWith("Free_Route_") && name.endsWith(".sls"));
+    const freeRouteFrpPath = firstMatchingFile(ddrRoot, (name) => name.startsWith("Free_Route_") && name.endsWith(".frp"));
+    if (
+      !navpointsPath ||
+      !routesPath ||
+      !airportsPath ||
+      !sectorsArePath ||
+      !sectorsSlsPath ||
+      !freeRouteArePath ||
+      !freeRouteSlsPath ||
+      !freeRouteFrpPath
+    ) {
+      return null;
+    }
+    ddrFolder = {
+      "navpoints.nnpt": readFileSync(navpointsPath, "utf-8"),
+      "routes.routes": readFileSync(routesPath, "utf-8"),
+      "airports.arp": readFileSync(airportsPath, "utf-8"),
+      "sectors.are": readFileSync(sectorsArePath, "utf-8"),
+      "sectors.sls": readFileSync(sectorsSlsPath, "utf-8"),
+      "free_route.are": readFileSync(freeRouteArePath, "utf-8"),
+      "free_route.sls": readFileSync(freeRouteSlsPath, "utf-8"),
+      "free_route.frp": readFileSync(freeRouteFrpPath, "utf-8"),
+    };
   }
 
   return {
@@ -365,15 +384,7 @@ export function loadEurocontrolInputs(): EurocontrolInputs | null {
       "StandardInstrumentDeparture.BASELINE.zip": new Uint8Array(readFileSync(sidZipPath)),
       "Airspace.BASELINE.zip": new Uint8Array(readFileSync(airspaceZipPath)),
     },
-    ddrFolder: {
-      "navpoints.nnpt": readFileSync(navpointsPath, "utf-8"),
-      "routes.routes": readFileSync(routesPath, "utf-8"),
-      "airports.arp": readFileSync(airportsPath, "utf-8"),
-      "sectors.are": readFileSync(sectorsArePath, "utf-8"),
-      "sectors.sls": readFileSync(sectorsSlsPath, "utf-8"),
-      "free_route.are": readFileSync(freeRouteArePath, "utf-8"),
-      "free_route.sls": readFileSync(freeRouteSlsPath, "utf-8"),
-      "free_route.frp": readFileSync(freeRouteFrpPath, "utf-8"),
-    },
+    ddrFolder,
+    ddrArchive,
   };
 }

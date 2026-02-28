@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Cursor};
 use std::path::{Path, PathBuf};
+
+use super::{file_name_matches, read_first_zip_entry_bytes};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DdrPolygon {
@@ -38,7 +40,14 @@ pub fn find_file_with_prefix_suffix<P: AsRef<Path>>(dir: P, prefix: &str, suffix
 pub fn parse_are_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, DdrPolygon>, Box<dyn std::error::Error>> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
+    parse_are_reader(reader)
+}
 
+pub fn parse_are_bytes(bytes: &[u8]) -> Result<HashMap<String, DdrPolygon>, Box<dyn std::error::Error>> {
+    parse_are_reader(BufReader::new(Cursor::new(bytes)))
+}
+
+fn parse_are_reader<R: BufRead>(reader: R) -> Result<HashMap<String, DdrPolygon>, Box<dyn std::error::Error>> {
     let mut polygons = HashMap::new();
     let mut expected_points = 0usize;
     let mut current_name = String::new();
@@ -97,6 +106,20 @@ pub fn parse_sls_file<P: AsRef<Path>>(
 ) -> Result<Vec<DdrSectorLayer>, Box<dyn std::error::Error>> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
+    parse_sls_reader(reader, polygons)
+}
+
+pub fn parse_sls_bytes(
+    bytes: &[u8],
+    polygons: &HashMap<String, DdrPolygon>,
+) -> Result<Vec<DdrSectorLayer>, Box<dyn std::error::Error>> {
+    parse_sls_reader(BufReader::new(Cursor::new(bytes)), polygons)
+}
+
+fn parse_sls_reader<R: BufRead>(
+    reader: R,
+    polygons: &HashMap<String, DdrPolygon>,
+) -> Result<Vec<DdrSectorLayer>, Box<dyn std::error::Error>> {
     let mut layers = Vec::new();
 
     for line in reader.lines() {
@@ -123,6 +146,59 @@ pub fn parse_sls_file<P: AsRef<Path>>(
         });
     }
     Ok(layers)
+}
+
+fn parse_layers_from_dir<P: AsRef<Path>>(
+    dir: P,
+    prefix: &str,
+) -> Result<Vec<DdrSectorLayer>, Box<dyn std::error::Error>> {
+    let dir = dir.as_ref();
+    let are =
+        find_file_with_prefix_suffix(dir, prefix, ".are").ok_or_else(|| format!("Unable to find {prefix}*.are"))?;
+    let sls =
+        find_file_with_prefix_suffix(dir, prefix, ".sls").ok_or_else(|| format!("Unable to find {prefix}*.sls"))?;
+    let polygons = parse_are_file(are)?;
+    parse_sls_file(sls, &polygons)
+}
+
+fn parse_layers_from_zip<P: AsRef<Path>>(
+    zip_path: P,
+    prefix: &str,
+) -> Result<Vec<DdrSectorLayer>, Box<dyn std::error::Error>> {
+    let are_bytes = read_first_zip_entry_bytes(&zip_path, |entry_name| file_name_matches(entry_name, prefix, ".are"))?;
+    let sls_bytes = read_first_zip_entry_bytes(&zip_path, |entry_name| file_name_matches(entry_name, prefix, ".sls"))?;
+    let polygons = parse_are_bytes(&are_bytes)?;
+    parse_sls_bytes(&sls_bytes, &polygons)
+}
+
+pub fn parse_sector_layers_path<P: AsRef<Path>>(path: P) -> Result<Vec<DdrSectorLayer>, Box<dyn std::error::Error>> {
+    let path = path.as_ref();
+    if path.is_dir() {
+        return parse_layers_from_dir(path, "Sectors_");
+    }
+    if path
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+    {
+        return parse_layers_from_zip(path, "Sectors_");
+    }
+    Err("DDR sector path must be a folder or a zip archive".into())
+}
+
+pub fn parse_fra_layers_path<P: AsRef<Path>>(path: P) -> Result<Vec<DdrSectorLayer>, Box<dyn std::error::Error>> {
+    let path = path.as_ref();
+    if path.is_dir() {
+        return parse_layers_from_dir(path, "Free_Route_");
+    }
+    if path
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+    {
+        return parse_layers_from_zip(path, "Free_Route_");
+    }
+    Err("DDR FRA path must be a folder or a zip archive".into())
 }
 
 pub fn parse_spc_file<P: AsRef<Path>>(path: P) -> Result<Vec<DdrCollapsedSector>, Box<dyn std::error::Error>> {
