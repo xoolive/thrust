@@ -31,6 +31,10 @@ const DDR_EXPECTED_FILES: [&str; 8] = [
     "free_route.frp",
 ];
 
+type DynError = Box<dyn std::error::Error>;
+type PointRefIndex = HashMap<String, AirwayPointRecord>;
+type NavpointsWithRefIndex = (Vec<NavpointRecord>, PointRefIndex);
+
 struct Node<'a> {
     name: QName<'a>,
     attributes: HashMap<String, String>,
@@ -93,7 +97,7 @@ fn read_text<R: std::io::BufRead>(reader: &mut Reader<R>, end: QName) -> Result<
     Ok(text)
 }
 
-fn read_baseline_xml_documents(zip_bytes: &[u8]) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+fn read_baseline_xml_documents(zip_bytes: &[u8]) -> Result<Vec<String>, DynError> {
     let cursor = Cursor::new(zip_bytes);
     let mut archive = ZipArchive::new(cursor)?;
     let mut xmls = Vec::new();
@@ -111,7 +115,7 @@ fn read_baseline_xml_documents(zip_bytes: &[u8]) -> Result<Vec<String>, Box<dyn 
     Ok(xmls)
 }
 
-fn parse_aixm_airports(zip_bytes: &[u8]) -> Result<Vec<AirportRecord>, Box<dyn std::error::Error>> {
+fn parse_aixm_airports(zip_bytes: &[u8]) -> Result<Vec<AirportRecord>, DynError> {
     let mut out = Vec::new();
     for xml in read_baseline_xml_documents(zip_bytes)? {
         let mut reader = Reader::from_reader(BufReader::new(Cursor::new(xml.into_bytes())));
@@ -186,9 +190,7 @@ fn parse_aixm_airports(zip_bytes: &[u8]) -> Result<Vec<AirportRecord>, Box<dyn s
     Ok(out)
 }
 
-fn parse_aixm_designated_points(
-    zip_bytes: &[u8],
-) -> Result<(Vec<NavpointRecord>, HashMap<String, AirwayPointRecord>), Box<dyn std::error::Error>> {
+fn parse_aixm_designated_points(zip_bytes: &[u8]) -> Result<NavpointsWithRefIndex, DynError> {
     let mut out = Vec::new();
     let mut by_id: HashMap<String, AirwayPointRecord> = HashMap::new();
     for xml in read_baseline_xml_documents(zip_bytes)? {
@@ -265,9 +267,7 @@ fn parse_aixm_designated_points(
     Ok((out, by_id))
 }
 
-fn parse_aixm_navaids(
-    zip_bytes: &[u8],
-) -> Result<(Vec<NavpointRecord>, HashMap<String, AirwayPointRecord>), Box<dyn std::error::Error>> {
+fn parse_aixm_navaids(zip_bytes: &[u8]) -> Result<NavpointsWithRefIndex, DynError> {
     let mut out = Vec::new();
     let mut by_id: HashMap<String, AirwayPointRecord> = HashMap::new();
     for xml in read_baseline_xml_documents(zip_bytes)? {

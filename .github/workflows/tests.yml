@@ -9,7 +9,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  rust:
+  rust-lint:
     runs-on: ubuntu-latest
     env:
       FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
@@ -36,10 +36,29 @@ jobs:
       - name: Rust linting
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+  rust-test:
+    runs-on: ubuntu-latest
+    env:
+      FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
+      FAA_NASR_AIRAC: "2508"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore FAA test data cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/thrust-faa
+          key: faa-data-${{ runner.os }}-v1
+
       - name: Rust tests
         run: cargo test --workspace --all-targets
 
-  python:
+  python-lint:
     runs-on: ubuntu-latest
     env:
       FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
@@ -77,10 +96,39 @@ jobs:
       - name: Python typing
         run: uv run ty check thrust
 
-      - name: Python tests
-        run: uv run pytest tests/test_airac.py tests/test_faa_data_access.py tests/test_eurocontrol_data_access.py --ignore=tests/test_kalman.py
+  python-test:
+    runs-on: ubuntu-latest
+    env:
+      FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
+      FAA_NASR_AIRAC: "2508"
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
 
-  wasm:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Restore FAA test data cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/thrust-faa
+          key: faa-data-${{ runner.os }}-v1
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Python tests
+        run: uv run pytest --ignore=tests/test_kalman.py
+
+  wasm-lint:
     runs-on: ubuntu-latest
     env:
       FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
@@ -111,11 +159,52 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Install TS lint dependencies
+        run: npm install
+        working-directory: crates/thrust-wasm/tests-ts
+
       - name: WASM formatting
         run: cargo fmt --all --check
 
       - name: WASM linting
         run: cargo clippy -p thrust-wasm --all-targets -- -D warnings
+
+      - name: TS linting
+        run: npm run lint
+        working-directory: crates/thrust-wasm/tests-ts
+
+      - name: TS typecheck
+        run: npm run typecheck
+        working-directory: crates/thrust-wasm/tests-ts
+
+  wasm-test:
+    runs-on: ubuntu-latest
+    env:
+      FAA_TEST_DATA_DIR: ~/.cache/thrust-faa
+      FAA_NASR_AIRAC: "2508"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Restore FAA test data cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/thrust-faa
+          key: faa-data-${{ runner.os }}-v1
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
 
       - name: WASM tests
         run: cargo test -p thrust-wasm --all-targets
@@ -124,7 +213,9 @@ jobs:
         run: wasm-pack build crates/thrust-wasm --target web --release --no-opt
 
       - name: Install TS test dependencies
-        run: npm install --prefix crates/thrust-wasm/tests-ts
+        run: npm install
+        working-directory: crates/thrust-wasm/tests-ts
 
       - name: Run TS tests
-        run: npm test --prefix crates/thrust-wasm/tests-ts
+        run: npm test
+        working-directory: crates/thrust-wasm/tests-ts
