@@ -3,9 +3,11 @@ use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 #[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "net")]
 use std::fs;
 use std::fs::File;
 #[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "net")]
 use std::io::Write;
 use std::io::{BufRead, BufReader, Cursor};
 use std::path::{Path, PathBuf};
@@ -165,23 +167,32 @@ pub fn download_nasr_zip_for_airac<P: AsRef<Path>>(
 
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let cycle = cycle_from_airac_code(airac_code)?;
-        fs::create_dir_all(&output_dir)?;
-
-        let filename = format!("NASR_{}_{}.zip", airac_code, cycle.effective_date.format("%Y-%m-%d"));
-        let output_path = output_dir.as_ref().join(filename);
-
-        if output_path.exists() {
-            return Ok(output_path);
+        #[cfg(not(feature = "net"))]
+        {
+            let _ = (airac_code, output_dir);
+            Err("NASR download is disabled; enable feature 'net'".into())
         }
 
-        let url = nasr_zip_url_from_airac_code(airac_code)?;
-        let bytes = reqwest::blocking::get(url)?.error_for_status()?.bytes()?;
+        #[cfg(feature = "net")]
+        {
+            let cycle = cycle_from_airac_code(airac_code)?;
+            fs::create_dir_all(&output_dir)?;
 
-        let mut file = File::create(&output_path)?;
-        file.write_all(&bytes)?;
+            let filename = format!("NASR_{}_{}.zip", airac_code, cycle.effective_date.format("%Y-%m-%d"));
+            let output_path = output_dir.as_ref().join(filename);
 
-        Ok(output_path)
+            if output_path.exists() {
+                return Ok(output_path);
+            }
+
+            let url = nasr_zip_url_from_airac_code(airac_code)?;
+            let bytes = reqwest::blocking::get(url)?.error_for_status()?.bytes()?;
+
+            let mut file = File::create(&output_path)?;
+            file.write_all(&bytes)?;
+
+            Ok(output_path)
+        }
     }
 }
 

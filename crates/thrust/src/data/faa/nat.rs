@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use crate::data::faa::nasr::NasrPoint;
 
+#[cfg(feature = "net")]
 const FAA_NAT_URL: &str = "https://notams.aim.faa.gov/nat.html";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -51,13 +52,21 @@ pub struct NatBulletin {
 }
 
 pub fn fetch_nat_bulletin() -> Result<NatBulletin, Box<dyn std::error::Error>> {
-    let text = reqwest::blocking::Client::new()
-        .get(FAA_NAT_URL)
-        .timeout(std::time::Duration::from_secs(60))
-        .send()?
-        .error_for_status()?
-        .text()?;
-    Ok(parse_nat_bulletin(&text))
+    #[cfg(not(feature = "net"))]
+    {
+        Err("FAA NAT network fetch is disabled; enable feature 'net'".into())
+    }
+
+    #[cfg(feature = "net")]
+    {
+        let text = reqwest::blocking::Client::new()
+            .get(FAA_NAT_URL)
+            .timeout(std::time::Duration::from_secs(60))
+            .send()?
+            .error_for_status()?
+            .text()?;
+        Ok(parse_nat_bulletin(&text))
+    }
 }
 
 pub fn parse_nat_bulletin(raw: &str) -> NatBulletin {

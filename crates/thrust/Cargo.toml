@@ -19,7 +19,7 @@ polars = { version = "0.52.0", features = ["lazy", "timezones", "rolling_window"
 quick-xml = "0.39.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.148"
-reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "rustls-tls"], optional = true }
 tokio = { version = "1", features = ["full"], optional = true }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", optional = true }
@@ -28,6 +28,7 @@ zip = "7.0.0"
 
 [features]
 default = []
+net = ["dep:reqwest"]
 polars = ["dep:polars", "dep:ndarray-linalg", "dep:numpy"]
 rest = ["dep:warp", "dep:tokio", "dep:tracing-subscriber"]
 

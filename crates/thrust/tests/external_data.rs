@@ -1,11 +1,14 @@
 use dotenvy::dotenv;
+#[cfg(feature = "net")]
 use reqwest::blocking::Client;
 use serde_json::Value;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(feature = "net")]
 use std::thread;
+#[cfg(feature = "net")]
 use std::time::Duration;
 
 use thrust::data::airac::effective_date_from_airac_code;
@@ -22,6 +25,7 @@ const FAA_ARCGIS_AIRPORTS_DATASET: &str = "e747ab91a11045e8b3f8a3efd093d3b5_0";
 const FAA_ARCGIS_DESIGNATED_POINTS_DATASET: &str = "861043a88ff4486c97c3789e7dcdccc6_0";
 const FAA_ARCGIS_NAVAID_COMPONENTS_DATASET: &str = "c9254c171b6741d3a5e494860761443a_0";
 const FAA_ARCGIS_ATS_ROUTES_DATASET: &str = "acf64966af5f48a1a40fdbcb31238ba7_0";
+#[cfg(feature = "net")]
 const FAA_NASR_BASE: &str = "https://nfdc.faa.gov/webContent/28DaySub";
 
 fn maybe_load_dotenv() {
@@ -42,30 +46,39 @@ fn fetch_url_to_path(url: &str, path: &Path) -> Result<(), Box<dyn std::error::E
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let client = Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .user_agent("thrust-tests/0.1")
-        .build()?;
-    let mut last_error: Option<reqwest::Error> = None;
-    for attempt in 0..5 {
-        match client.get(url).send().and_then(|resp| resp.error_for_status()) {
-            Ok(resp) => {
-                let body = resp.bytes()?;
-                fs::write(path, &body)?;
-                return Ok(());
-            }
-            Err(err) => {
-                last_error = Some(err);
-                if attempt < 4 {
-                    thread::sleep(Duration::from_secs(2_u64.pow((attempt as u32).min(4))));
+    #[cfg(feature = "net")]
+    {
+        let client = Client::builder()
+            .redirect(reqwest::redirect::Policy::limited(10))
+            .user_agent("thrust-tests/0.1")
+            .build()?;
+        let mut last_error: Option<reqwest::Error> = None;
+        for attempt in 0..5 {
+            match client.get(url).send().and_then(|resp| resp.error_for_status()) {
+                Ok(resp) => {
+                    let body = resp.bytes()?;
+                    fs::write(path, &body)?;
+                    return Ok(());
+                }
+                Err(err) => {
+                    last_error = Some(err);
+                    if attempt < 4 {
+                        thread::sleep(Duration::from_secs(2_u64.pow((attempt as u32).min(4))));
+                    }
                 }
             }
         }
+
+        match last_error {
+            Some(err) => Err(Box::new(err)),
+            None => Err("request failed without an error".into()),
+        }
     }
 
-    match last_error {
-        Some(err) => Err(Box::new(err)),
-        None => Err("request failed without an error".into()),
+    #[cfg(not(feature = "net"))]
+    {
+        let _ = (url, path);
+        Err("unable to fetch URL to path".into())
     }
 }
 
@@ -133,34 +146,43 @@ fn ensure_nasr_zip() -> Result<PathBuf, Box<dyn std::error::Error>> {
         }
     }
 
-    let client = Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .user_agent("thrust-tests/0.1")
-        .build()?;
+    #[cfg(feature = "net")]
+    {
+        let client = Client::builder()
+            .redirect(reqwest::redirect::Policy::limited(10))
+            .user_agent("thrust-tests/0.1")
+            .build()?;
 
-    for code in candidates {
-        let date = match effective_date_from_airac_code(&code) {
-            Ok(d) => d,
-            Err(_) => continue,
-        };
-        let url = format!(
-            "{FAA_NASR_BASE}/28DaySubscription_Effective_{}.zip",
-            date.format("%Y-%m-%d")
-        );
-        let response = client.get(&url).send();
-        if let Ok(resp) = response {
-            if resp.status().is_success() {
-                let target = nasr_root.join(format!("28DaySubscription_Effective_{}.zip", date.format("%Y-%m-%d")));
-                if let Some(parent) = target.parent() {
-                    fs::create_dir_all(parent)?;
+        for code in candidates {
+            let date = match effective_date_from_airac_code(&code) {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
+            let url = format!(
+                "{FAA_NASR_BASE}/28DaySubscription_Effective_{}.zip",
+                date.format("%Y-%m-%d")
+            );
+            let response = client.get(&url).send();
+            if let Ok(resp) = response {
+                if resp.status().is_success() {
+                    let target = nasr_root.join(format!("28DaySubscription_Effective_{}.zip", date.format("%Y-%m-%d")));
+                    if let Some(parent) = target.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    fs::write(&target, resp.bytes()?)?;
+                    return Ok(target);
                 }
-                fs::write(&target, resp.bytes()?)?;
-                return Ok(target);
             }
         }
+
+        Err("unable to prepare NASR zip for tests".into())
     }
 
-    Err("unable to prepare NASR zip for tests".into())
+    #[cfg(not(feature = "net"))]
+    {
+        let _ = candidates;
+        Err("unable to prepare NASR zip for tests".into())
+    }
 }
 
 #[test]
@@ -234,6 +256,22 @@ fn eurocontrol_entities_are_resolvable_when_paths_are_set() {
 #[test]
 fn faa_arcgis_entities_are_present() {
     maybe_load_dotenv();
+    if !cfg!(feature = "net") {
+        let root = cache_root().join("arcgis");
+        let required = [
+            "faa_airports.json",
+            "faa_designated_points.json",
+            "faa_navaid_components.json",
+            "faa_ats_routes.json",
+        ];
+        let missing = required
+            .iter()
+            .any(|name| root.join(name).metadata().map(|m| m.len() == 0).unwrap_or(true));
+        if missing {
+            return;
+        }
+    }
+
     let airports_path = ensure_arcgis_geojson("faa_airports.json", FAA_ARCGIS_AIRPORTS_DATASET)
         .expect("unable to fetch FAA airports geojson");
     let airports_json = fs::read_to_string(airports_path).expect("unable to read FAA airports json");
@@ -321,6 +359,9 @@ fn faa_arcgis_entities_are_present() {
 #[test]
 fn faa_nasr_entities_are_present() {
     maybe_load_dotenv();
+    if !cfg!(feature = "net") && ensure_nasr_zip().is_err() {
+        return;
+    }
     let nasr_zip = ensure_nasr_zip().expect("unable to fetch NASR zip");
     let bytes = fs::read(nasr_zip).expect("unable to read NASR zip bytes");
     let parsed = parse_field15_data_from_nasr_bytes(&bytes).expect("unable to parse NASR field15 data");

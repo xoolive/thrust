@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[cfg(feature = "net")]
 const OPENDATA_BASE: &str = "https://opendata.arcgis.com/datasets";
 
 const ATS_ROUTE_DATASET: &str = "acf64966af5f48a1a40fdbcb31238ba7_0";
@@ -31,23 +32,32 @@ pub struct FaaOpenData {
 }
 
 fn fetch_geojson(dataset_id: &str) -> Result<Vec<FaaFeature>, Box<dyn std::error::Error>> {
-    let url = format!("{OPENDATA_BASE}/{dataset_id}.geojson");
-    let payload = reqwest::blocking::get(url)?.error_for_status()?.json::<Value>()?;
+    #[cfg(not(feature = "net"))]
+    {
+        let _ = dataset_id;
+        Err("FAA ArcGIS network fetch is disabled; enable feature 'net'".into())
+    }
 
-    let features = payload
-        .get("features")
-        .and_then(|x| x.as_array())
-        .map(|arr| {
-            arr.iter()
-                .map(|feature| FaaFeature {
-                    properties: feature.get("properties").cloned().unwrap_or(Value::Null),
-                    geometry: feature.get("geometry").cloned().unwrap_or(Value::Null),
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
+    #[cfg(feature = "net")]
+    {
+        let url = format!("{OPENDATA_BASE}/{dataset_id}.geojson");
+        let payload = reqwest::blocking::get(url)?.error_for_status()?.json::<Value>()?;
 
-    Ok(features)
+        let features = payload
+            .get("features")
+            .and_then(|x| x.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .map(|feature| FaaFeature {
+                        properties: feature.get("properties").cloned().unwrap_or(Value::Null),
+                        geometry: feature.get("geometry").cloned().unwrap_or(Value::Null),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        Ok(features)
+    }
 }
 
 pub fn parse_faa_ats_routes() -> Result<Vec<FaaFeature>, Box<dyn std::error::Error>> {

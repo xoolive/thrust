@@ -642,7 +642,9 @@ fn find_zip_text_entry(ddr_archive: &[u8], predicate: impl Fn(&str) -> bool) -> 
     Err(JsValue::from_str("matching DDR file not found in archive"))
 }
 
-fn ddr_file_key_and_matchers() -> [(&'static str, fn(&str) -> bool); 8] {
+type DdrEntryMatcher = (&'static str, fn(&str) -> bool);
+
+fn ddr_file_key_and_matchers() -> [DdrEntryMatcher; 8] {
     [
         ("navpoints.nnpt", |name: &str| {
             let lower = name.to_ascii_lowercase();
