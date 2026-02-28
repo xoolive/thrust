@@ -70,7 +70,14 @@ jobs:
               return
             fi
             tmp="${target}.tmp"
-            curl -fL --retry 8 --retry-all-errors --connect-timeout 30 --max-time 300 -o "$tmp" "$url"
+            curl -fL \
+              --retry 8 \
+              --retry-all-errors \
+              --retry-delay 2 \
+              --retry-max-time 900 \
+              --connect-timeout 30 \
+              --max-time 900 \
+              -o "$tmp" "$url"
             mv "$tmp" "$target"
           }
 
@@ -110,7 +117,14 @@ jobs:
               return
             fi
             tmp="${target}.tmp"
-            curl -fL --retry 8 --retry-all-errors --connect-timeout 30 --max-time 300 -o "$tmp" "$url"
+            curl -fL \
+              --retry 8 \
+              --retry-all-errors \
+              --retry-delay 2 \
+              --retry-max-time 900 \
+              --connect-timeout 30 \
+              --max-time 900 \
+              -o "$tmp" "$url"
             mv "$tmp" "$target"
           }
 
