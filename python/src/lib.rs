@@ -8,8 +8,6 @@ pub mod airspaces;
 pub mod airways;
 pub mod field15;
 pub mod intervals;
-#[cfg(feature = "polars")]
-pub mod kalman;
 pub mod navpoints;
 
 #[pymodule]
@@ -48,12 +46,6 @@ fn thrust(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     let navpoints_mod = navpoints::init(py)?;
     m.add_submodule(&navpoints_mod)?;
     modules.set_item("thrust.core.navpoints", &navpoints_mod)?;
-
-    #[cfg(feature = "polars")]
-    {
-        /*let kalman_mod = kalman::init(py)?;
-        m.add_submodule(&kalman_mod)?;*/
-    }
 
     Ok(())
 }

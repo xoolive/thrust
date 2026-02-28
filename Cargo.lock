@@ -3597,7 +3597,6 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "numpy",
- "polars",
  "pyo3",
  "serde_json",
  "traffic-thrust",

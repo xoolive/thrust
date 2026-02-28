@@ -9,11 +9,6 @@ license.workspace = true
 edition.workspace = true
 exclude = ["__pycache__", "**/__pycache__", "**/__pycache__/**", "*.pyc", "**/*.pyc"]
 
-[features]
-default = []
-# for now the pyo3 polars does not work, let's wait and see with next versions
-polars = []
-
 [lib]
 name = "thrust_py"
 crate-type = ["cdylib"]
@@ -21,7 +16,6 @@ crate-type = ["cdylib"]
 [dependencies]
 chrono = "0.4.43"
 numpy = "0.27.1"
-polars = { version = "0.52.0", features = ["lazy", "timezones", "rolling_window"] }
 pyo3 = "0.27.2"
 serde_json = "1"
-traffic-thrust = { version = "0.1.0", path = "../crates/thrust", features = ["polars"] }
+traffic-thrust = { version = "0.1.0", path = "../crates/thrust" }

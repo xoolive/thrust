@@ -331,7 +331,7 @@ jobs:
         run: uv sync --dev
 
       - name: Python tests
-        run: uv run pytest --ignore=tests/test_kalman.py --ignore=tests/test_intervals.py
+        run: uv run pytest
 
   wasm-lint:
     runs-on: ubuntu-latest
