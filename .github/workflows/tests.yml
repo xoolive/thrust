@@ -21,7 +21,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Restore Rust build cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cargo/registry
@@ -36,7 +36,7 @@ jobs:
         run: cargo build --release
 
       - name: Save Rust build cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: |
             ~/.cargo/registry
@@ -52,7 +52,7 @@ jobs:
     steps:
       - name: Restore FAA cache
         id: faa-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/.ci-cache/thrust-faa
           key: faa-data-v1
@@ -104,7 +104,7 @@ jobs:
     steps:
       - name: Restore Eurocontrol cache
         id: eurocontrol-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol
           key: eurocontrol-data-v1
@@ -187,7 +187,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Restore Rust build cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cargo/registry
@@ -218,7 +218,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Restore Rust build cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cargo/registry
@@ -263,7 +263,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
 
       - name: Restore Rust build cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cargo/registry
@@ -307,7 +307,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
 
       - name: Restore Rust build cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cargo/registry
@@ -350,7 +350,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Restore Rust build cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cargo/registry
@@ -400,7 +400,7 @@ jobs:
           fetch-depth: 1
 
       - name: Restore FAA test data cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ${{ github.workspace }}/.ci-cache/thrust-faa
           key: faa-data-v1
@@ -415,7 +415,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Restore Rust build cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             ~/.cargo/registry
