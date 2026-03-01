@@ -3,6 +3,9 @@ name = "traffic-thrust"
 version = "0.1.0"
 edition = "2021"
 authors = ["Xavier Olive <git@xoolive.org>"]
+description = "Core Rust parsers and resolvers for aviation navigation data"
+repository = "https://github.com/xoolive/thrust"
+license = "MIT"
 readme = "readme.md"
 
 [lib]
