@@ -18,3 +18,8 @@ overflow-checks = true
 inherits = "release"
 lto = true
 strip = true
+
+[workspace.metadata.release]
+shared-version = true
+consolidate-commits = true
+tag-name = "v{{version}}"
