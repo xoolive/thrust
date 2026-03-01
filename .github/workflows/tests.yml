@@ -227,13 +227,13 @@ jobs:
           key: rust-build-${{ runner.os }}-${{ github.sha }}
 
       - name: Download FAA test data artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: faa-test-data
           path: ${{ github.workspace }}/.ci-cache/thrust-faa
 
       - name: Download Eurocontrol data artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: eurocontrol-test-data
           path: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol
@@ -316,13 +316,13 @@ jobs:
           key: rust-build-${{ runner.os }}-${{ github.sha }}
 
       - name: Download FAA test data artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: faa-test-data
           path: ${{ github.workspace }}/.ci-cache/thrust-faa
 
       - name: Download Eurocontrol data artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: eurocontrol-test-data
           path: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol
@@ -406,7 +406,7 @@ jobs:
           key: faa-data-v1
 
       - name: Download Eurocontrol data artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: eurocontrol-test-data
           path: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol
