@@ -1,6 +1,6 @@
 [package]
 name = "thrust-wasm"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "WASM bindings for traffic-thrust core parsers"
 repository = "https://github.com/xoolive/thrust"
@@ -18,7 +18,7 @@ default = ["console_error_panic_hook"]
 console_error_panic_hook = ["dep:console_error_panic_hook"]
 
 [dependencies]
-traffic-thrust = { version = "0.1.0", path = "../thrust" }
+traffic-thrust = { version = "0.2.0", path = "../thrust" }
 wasm-bindgen = "0.2"
 js-sys = "0.3"
 serde = { version = "1", features = ["derive"] }
