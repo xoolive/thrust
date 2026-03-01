@@ -14,7 +14,7 @@ name = "thrust_py"
 crate-type = ["cdylib"]
 
 [dependencies]
-chrono = "0.4.43"
+chrono = "0.4.44"
 numpy = "0.27.1"
 pyo3 = "0.27.2"
 serde_json = "1"
