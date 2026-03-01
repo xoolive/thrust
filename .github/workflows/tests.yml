@@ -93,7 +93,7 @@ jobs:
           download_if_missing "$NASR_FILE" "$NASR_URL"
 
       - name: Upload FAA test data artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: faa-test-data
           path: ${{ github.workspace }}/.ci-cache/thrust-faa
@@ -164,7 +164,7 @@ jobs:
           fi
 
       - name: Upload Eurocontrol data artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eurocontrol-test-data
           path: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol
