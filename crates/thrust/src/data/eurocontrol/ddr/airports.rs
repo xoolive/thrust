@@ -12,6 +12,26 @@ pub struct DdrAirport {
     pub longitude: f64,
 }
 
+fn decode_ddr_coords(lat_raw: f64, lon_raw: f64) -> Option<(f64, f64)> {
+    if lat_raw.abs() <= 90.0 && lon_raw.abs() <= 180.0 {
+        return Some((lat_raw, lon_raw));
+    }
+
+    let lat_minutes = lat_raw / 60.0;
+    let lon_minutes = lon_raw / 60.0;
+    if lat_minutes.abs() <= 90.0 && lon_minutes.abs() <= 180.0 {
+        return Some((lat_minutes, lon_minutes));
+    }
+
+    let lat_scaled = lat_raw / 600_000.0;
+    let lon_scaled = lon_raw / 600_000.0;
+    if lat_scaled.abs() <= 90.0 && lon_scaled.abs() <= 180.0 {
+        return Some((lat_scaled, lon_scaled));
+    }
+
+    None
+}
+
 pub fn parse_airports_path<P: AsRef<Path>>(path: P) -> Result<Vec<DdrAirport>, Box<dyn std::error::Error>> {
     let path = path.as_ref();
     if path.is_dir() {
@@ -75,11 +95,30 @@ fn parse_airports_reader<R: BufRead>(reader: R) -> Result<Vec<DdrAirport>, Box<d
             _ => continue,
         };
 
+        let Some((latitude, longitude)) = decode_ddr_coords(lat_raw, lon_raw) else {
+            continue;
+        };
+
         airports.push(DdrAirport {
             code,
-            latitude: lat_raw / 100.0,
-            longitude: lon_raw / 100.0,
+            latitude,
+            longitude,
         });
     }
     Ok(airports)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_airports_bytes;
+
+    #[test]
+    fn parse_lfbo_coordinates_from_ddr_arp() {
+        let sample = b"LFBO 2618.100000 82.066667\n";
+        let airports = parse_airports_bytes(sample).expect("failed to parse sample airports");
+        let lfbo = airports.iter().find(|a| a.code == "LFBO").expect("LFBO not found");
+
+        assert!((lfbo.latitude - 43.635).abs() < 1e-9);
+        assert!((lfbo.longitude - 1.3677777833333334).abs() < 1e-9);
+    }
 }
