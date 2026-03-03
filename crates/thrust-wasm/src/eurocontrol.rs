@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufReader, Cursor, Read};
 
 use quick_xml::{events::Event, name::QName, Reader};
@@ -472,6 +472,7 @@ fn parse_aixm_airways(
         .map(|(name, points)| AirwayRecord {
             name,
             source: "eurocontrol_aixm".to_string(),
+            route_class: None,
             points,
         })
         .collect())
@@ -527,6 +528,26 @@ fn parse_ddr_navpoints(text: &str) -> Vec<NavpointRecord> {
 }
 
 fn parse_ddr_airports(text: &str) -> Vec<AirportRecord> {
+    fn decode_ddr_coords(lat_raw: f64, lon_raw: f64) -> Option<(f64, f64)> {
+        if lat_raw.abs() <= 90.0 && lon_raw.abs() <= 180.0 {
+            return Some((lat_raw, lon_raw));
+        }
+
+        let lat_minutes = lat_raw / 60.0;
+        let lon_minutes = lon_raw / 60.0;
+        if lat_minutes.abs() <= 90.0 && lon_minutes.abs() <= 180.0 {
+            return Some((lat_minutes, lon_minutes));
+        }
+
+        let lat_scaled = lat_raw / 600_000.0;
+        let lon_scaled = lon_raw / 600_000.0;
+        if lat_scaled.abs() <= 90.0 && lon_scaled.abs() <= 180.0 {
+            return Some((lat_scaled, lon_scaled));
+        }
+
+        None
+    }
+
     let mut out = Vec::new();
     for line in text.lines() {
         let line = line.trim();
@@ -549,13 +570,17 @@ fn parse_ddr_airports(text: &str) -> Vec<AirportRecord> {
             Ok(v) => v,
             Err(_) => continue,
         };
+        let Some((latitude, longitude)) = decode_ddr_coords(lat_raw, lon_raw) else {
+            continue;
+        };
+
         out.push(AirportRecord {
             code: code.clone(),
             iata: None,
             icao: Some(code),
             name: None,
-            latitude: lat_raw / 100.0,
-            longitude: lon_raw / 100.0,
+            latitude,
+            longitude,
             region: None,
             source: "eurocontrol_ddr".to_string(),
         });
@@ -563,8 +588,23 @@ fn parse_ddr_airports(text: &str) -> Vec<AirportRecord> {
     out
 }
 
+#[cfg(test)]
+mod tests {
+    use super::parse_ddr_airports;
+
+    #[test]
+    fn parse_lfbo_coordinates_from_ddr_arp() {
+        let airports = parse_ddr_airports("LFBO 2618.100000 82.066667\n");
+        let lfbo = airports.iter().find(|a| a.code == "LFBO").expect("LFBO not found");
+
+        assert!((lfbo.latitude - 43.635).abs() < 1e-9);
+        assert!((lfbo.longitude - 1.3677777833333334).abs() < 1e-9);
+    }
+}
+
 fn parse_ddr_airways(text: &str, point_lookup: &HashMap<String, (f64, f64, String)>) -> Vec<AirwayRecord> {
     let mut grouped: HashMap<String, Vec<(i32, AirwayPointRecord)>> = HashMap::new();
+    let mut route_class_by_name: HashMap<String, String> = HashMap::new();
     for line in text.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -575,12 +615,15 @@ fn parse_ddr_airways(text: &str, point_lookup: &HashMap<String, (f64, f64, Strin
             continue;
         }
         let route = fields[1].trim().to_uppercase();
+        let route_class = fields[2].trim().to_uppercase();
         let navaid = fields[5].trim().to_uppercase();
         let seq = fields[7].trim().parse::<i32>().unwrap_or(0);
         let (lat, lon, kind) = point_lookup
             .get(&navaid)
             .cloned()
             .unwrap_or((0.0, 0.0, "point".to_string()));
+
+        route_class_by_name.entry(route.clone()).or_insert(route_class);
 
         grouped.entry(route).or_default().push((
             seq,
@@ -607,6 +650,7 @@ fn parse_ddr_airways(text: &str, point_lookup: &HashMap<String, (f64, f64, Strin
                 acc
             });
         out.push(AirwayRecord {
+            route_class: route_class_by_name.get(&name).cloned(),
             name,
             source: "eurocontrol_ddr".to_string(),
             points: deduped,
@@ -690,21 +734,11 @@ fn build_from_ddr_text_files(files: HashMap<String, String>) -> Result<Eurocontr
         }
     }
 
-    let mut fixes = Vec::new();
-    let mut navaids = Vec::new();
-
-    let ddr_points = parse_ddr_navpoints(
+    let navaids = parse_ddr_navpoints(
         files
             .get("navpoints.nnpt")
             .ok_or_else(|| JsValue::from_str("missing navpoints.nnpt"))?,
     );
-    for p in &ddr_points {
-        if p.kind == "fix" {
-            fixes.push(p.clone());
-        } else {
-            navaids.push(p.clone());
-        }
-    }
 
     let airports = parse_ddr_airports(
         files
@@ -712,7 +746,7 @@ fn build_from_ddr_text_files(files: HashMap<String, String>) -> Result<Eurocontr
             .ok_or_else(|| JsValue::from_str("missing airports.arp"))?,
     );
     let mut point_lookup: HashMap<String, (f64, f64, String)> = HashMap::new();
-    for p in &ddr_points {
+    for p in &navaids {
         point_lookup.insert(p.code.clone(), (p.latitude, p.longitude, p.kind.clone()));
     }
     let airways = parse_ddr_airways(
@@ -722,17 +756,15 @@ fn build_from_ddr_text_files(files: HashMap<String, String>) -> Result<Eurocontr
         &point_lookup,
     );
 
-    EurocontrolResolver::build(airports, fixes, navaids, airways)
+    EurocontrolResolver::build(airports, navaids, airways)
 }
 
 #[wasm_bindgen]
 pub struct EurocontrolResolver {
     airports: Vec<AirportRecord>,
-    fixes: Vec<NavpointRecord>,
     navaids: Vec<NavpointRecord>,
     airways: Vec<AirwayRecord>,
     airport_index: HashMap<String, Vec<usize>>,
-    fix_index: HashMap<String, Vec<usize>>,
     navaid_index: HashMap<String, Vec<usize>>,
     airway_index: HashMap<String, Vec<usize>>,
 }
@@ -757,19 +789,20 @@ impl EurocontrolResolver {
                 .ok_or_else(|| JsValue::from_str("missing AirportHeliport.BASELINE.zip"))?,
         )
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        let (fixes, fixes_by_id) = parse_aixm_designated_points(
+        let (designated_points, designated_points_by_id) = parse_aixm_designated_points(
             files
                 .get("DesignatedPoint.BASELINE.zip")
                 .ok_or_else(|| JsValue::from_str("missing DesignatedPoint.BASELINE.zip"))?,
         )
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        let (navaids, navaids_by_id) = parse_aixm_navaids(
+        let (mut navaids, navaids_by_id) = parse_aixm_navaids(
             files
                 .get("Navaid.BASELINE.zip")
                 .ok_or_else(|| JsValue::from_str("missing Navaid.BASELINE.zip"))?,
         )
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        let mut point_refs = fixes_by_id;
+        navaids.extend(designated_points);
+        let mut point_refs = designated_points_by_id;
         point_refs.extend(navaids_by_id);
         let airways = parse_aixm_airways(
             files
@@ -782,7 +815,7 @@ impl EurocontrolResolver {
         )
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        Self::build(airports, fixes, navaids, airways)
+        Self::build(airports, navaids, airways)
     }
 
     #[wasm_bindgen(js_name = fromDdrFolder)]
@@ -805,10 +838,21 @@ impl EurocontrolResolver {
 
     fn build(
         airports: Vec<AirportRecord>,
-        fixes: Vec<NavpointRecord>,
-        navaids: Vec<NavpointRecord>,
+        mut navaids: Vec<NavpointRecord>,
         airways: Vec<AirwayRecord>,
     ) -> Result<EurocontrolResolver, JsValue> {
+        let mut seen = HashSet::new();
+        navaids.retain(|n| {
+            let key = format!(
+                "{}|{}|{:.8}|{:.8}",
+                n.code,
+                n.point_type.as_deref().unwrap_or(""),
+                n.latitude,
+                n.longitude
+            );
+            seen.insert(key)
+        });
+
         let mut airport_index: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, a) in airports.iter().enumerate() {
             airport_index.entry(a.code.clone()).or_default().push(i);
@@ -818,11 +862,6 @@ impl EurocontrolResolver {
             if let Some(v) = &a.icao {
                 airport_index.entry(v.clone()).or_default().push(i);
             }
-        }
-
-        let mut fix_index: HashMap<String, Vec<usize>> = HashMap::new();
-        for (i, n) in fixes.iter().enumerate() {
-            fix_index.entry(n.code.clone()).or_default().push(i);
         }
 
         let mut navaid_index: HashMap<String, Vec<usize>> = HashMap::new();
@@ -838,11 +877,9 @@ impl EurocontrolResolver {
 
         Ok(EurocontrolResolver {
             airports,
-            fixes,
             navaids,
             airways,
             airport_index,
-            fix_index,
             navaid_index,
             airway_index,
         })
@@ -853,7 +890,7 @@ impl EurocontrolResolver {
     }
 
     pub fn fixes(&self) -> Result<JsValue, JsValue> {
-        serde_wasm_bindgen::to_value(&self.fixes).map_err(|e| JsValue::from_str(&e.to_string()))
+        serde_wasm_bindgen::to_value(&self.navaids).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     pub fn navaids(&self) -> Result<JsValue, JsValue> {
@@ -878,10 +915,10 @@ impl EurocontrolResolver {
     pub fn resolve_fix(&self, code: String) -> Result<JsValue, JsValue> {
         let key = code.to_uppercase();
         let item = self
-            .fix_index
+            .navaid_index
             .get(&key)
             .and_then(|idx| idx.first().copied())
-            .and_then(|i| self.fixes.get(i))
+            .and_then(|i| self.navaids.get(i))
             .cloned();
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
     }

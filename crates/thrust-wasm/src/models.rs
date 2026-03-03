@@ -40,6 +40,7 @@ pub struct AirwayPointRecord {
 pub struct AirwayRecord {
     pub name: String,
     pub source: String,
+    pub route_class: Option<String>,
     pub points: Vec<AirwayPointRecord>,
 }
 

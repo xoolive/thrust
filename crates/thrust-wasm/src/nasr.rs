@@ -73,7 +73,7 @@ impl NasrResolver {
             })
             .collect();
 
-        let navaids: Vec<NavpointRecord> = points
+        let mut navaids: Vec<NavpointRecord> = points
             .iter()
             .filter(|p| p.kind == "NAVAID")
             .map(|p| NavpointRecord {
@@ -90,6 +90,12 @@ impl NasrResolver {
                 source: "faa_nasr".to_string(),
             })
             .collect();
+
+        navaids.extend(fixes.iter().cloned());
+        navaids.sort_by(|a, b| a.code.cmp(&b.code).then(a.point_type.cmp(&b.point_type)));
+        navaids.dedup_by(|a, b| {
+            a.code == b.code && a.point_type == b.point_type && a.latitude == b.latitude && a.longitude == b.longitude
+        });
 
         let mut point_index: HashMap<String, AirwayPointRecord> = HashMap::new();
         for p in &points {
@@ -144,6 +150,7 @@ impl NasrResolver {
             .map(|(name, points)| AirwayRecord {
                 name,
                 source: "faa_nasr".to_string(),
+                route_class: None,
                 points,
             })
             .collect();
@@ -178,11 +185,7 @@ impl NasrResolver {
             navaid_index.entry(n.identifier.clone()).or_default().push(i);
         }
 
-        let mut fix_index: HashMap<String, Vec<usize>> = HashMap::new();
-        for (i, n) in fixes.iter().enumerate() {
-            fix_index.entry(n.code.clone()).or_default().push(i);
-            fix_index.entry(n.identifier.clone()).or_default().push(i);
-        }
+        let fix_index = navaid_index.clone();
 
         let mut airway_index: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, a) in airways.iter().enumerate() {
@@ -197,8 +200,8 @@ impl NasrResolver {
 
         Ok(Self {
             airports,
+            fixes: navaids.clone(),
             navaids,
-            fixes,
             airways,
             airspaces,
             airport_index,

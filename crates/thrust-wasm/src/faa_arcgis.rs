@@ -363,6 +363,7 @@ fn arcgis_features_to_airways(features: &[Value]) -> Vec<AirwayRecord> {
         .map(|(name, points)| AirwayRecord {
             name,
             source: "faa_arcgis".to_string(),
+            route_class: None,
             points,
         })
         .collect()
@@ -372,12 +373,10 @@ fn arcgis_features_to_airways(features: &[Value]) -> Vec<AirwayRecord> {
 pub struct FaaArcgisResolver {
     airports: Vec<AirportRecord>,
     airspaces: Vec<AirspaceRecord>,
-    fixes: Vec<NavpointRecord>,
     navaids: Vec<NavpointRecord>,
     airways: Vec<AirwayRecord>,
     airport_index: HashMap<String, Vec<usize>>,
     airspace_index: HashMap<String, Vec<usize>>,
-    fix_index: HashMap<String, Vec<usize>>,
     navaid_index: HashMap<String, Vec<usize>>,
     airway_index: HashMap<String, Vec<usize>>,
 }
@@ -401,7 +400,12 @@ impl FaaArcgisResolver {
 
         let airports = arcgis_features_to_airports(&features);
         let airspaces = arcgis_features_to_airspaces(&features);
-        let (fixes, navaids) = arcgis_features_to_navpoints(&features);
+        let (fixes, mut navaids) = arcgis_features_to_navpoints(&features);
+        navaids.extend(fixes.iter().cloned());
+        navaids.sort_by(|a, b| a.code.cmp(&b.code).then(a.point_type.cmp(&b.point_type)));
+        navaids.dedup_by(|a, b| {
+            a.code == b.code && a.point_type == b.point_type && a.latitude == b.latitude && a.longitude == b.longitude
+        });
         let airways = arcgis_features_to_airways(&features);
 
         let mut airport_index: HashMap<String, Vec<usize>> = HashMap::new();
@@ -420,11 +424,6 @@ impl FaaArcgisResolver {
             airspace_index.entry(a.designator.to_uppercase()).or_default().push(i);
         }
 
-        let mut fix_index: HashMap<String, Vec<usize>> = HashMap::new();
-        for (i, n) in fixes.iter().enumerate() {
-            fix_index.entry(n.code.clone()).or_default().push(i);
-        }
-
         let mut navaid_index: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, n) in navaids.iter().enumerate() {
             navaid_index.entry(n.code.clone()).or_default().push(i);
@@ -439,12 +438,10 @@ impl FaaArcgisResolver {
         Ok(Self {
             airports,
             airspaces,
-            fixes,
             navaids,
             airways,
             airport_index,
             airspace_index,
-            fix_index,
             navaid_index,
             airway_index,
         })
@@ -455,7 +452,7 @@ impl FaaArcgisResolver {
     }
 
     pub fn fixes(&self) -> Result<JsValue, JsValue> {
-        serde_wasm_bindgen::to_value(&self.fixes).map_err(|e| JsValue::from_str(&e.to_string()))
+        serde_wasm_bindgen::to_value(&self.navaids).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     pub fn navaids(&self) -> Result<JsValue, JsValue> {
@@ -485,10 +482,10 @@ impl FaaArcgisResolver {
     pub fn resolve_fix(&self, code: String) -> Result<JsValue, JsValue> {
         let key = code.to_uppercase();
         let item = self
-            .fix_index
+            .navaid_index
             .get(&key)
             .and_then(|idx| idx.first().copied())
-            .and_then(|i| self.fixes.get(i))
+            .and_then(|i| self.navaids.get(i))
             .cloned();
 
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
