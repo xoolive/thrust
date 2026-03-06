@@ -522,11 +522,17 @@ impl FaaArcgisResolver {
 
     pub fn resolve_fix(&self, code: String) -> Result<JsValue, JsValue> {
         let key = code.to_uppercase();
+        // Prefer records with kind == "fix"; fall back to the first match.
         let item = self
             .navaid_index
             .get(&key)
-            .and_then(|idx| idx.first().copied())
-            .and_then(|i| self.navaids.get(i))
+            .and_then(|indices| {
+                indices
+                    .iter()
+                    .filter_map(|&i| self.navaids.get(i))
+                    .find(|r| r.kind == "fix")
+                    .or_else(|| indices.first().and_then(|&i| self.navaids.get(i)))
+            })
             .cloned();
 
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
@@ -534,11 +540,17 @@ impl FaaArcgisResolver {
 
     pub fn resolve_navaid(&self, code: String) -> Result<JsValue, JsValue> {
         let key = code.to_uppercase();
+        // Prefer records with kind == "navaid"; fall back to the first match.
         let item = self
             .navaid_index
             .get(&key)
-            .and_then(|idx| idx.first().copied())
-            .and_then(|i| self.navaids.get(i))
+            .and_then(|indices| {
+                indices
+                    .iter()
+                    .filter_map(|&i| self.navaids.get(i))
+                    .find(|r| r.kind == "navaid")
+                    .or_else(|| indices.first().and_then(|&i| self.navaids.get(i)))
+            })
             .cloned();
 
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
@@ -623,6 +635,103 @@ mod tests {
         assert!(baf.latitude.abs() > 1.0);
         assert!(baf.longitude.abs() > 1.0);
         assert_eq!(baf.point_type.as_deref(), Some("VORTAC"));
+    }
+
+    /// Regression test: when a fix and a navaid share the same code (e.g. "BAF" is
+    /// both a designated fix and the Barnes VORTAC), resolve_navaid must return the
+    /// navaid record (with the proper name) and resolve_fix must return the fix record.
+    /// Before the fix, the merged+sorted navaids vec placed the fix record first
+    /// (point_type "RPT" < "VORTAC" lexicographically), so resolve_navaid("BAF")
+    /// returned name="BAF" instead of name="BARNES MUNICIPAL".
+    #[test]
+    fn resolve_navaid_prefers_navaid_kind_when_fix_has_same_code() {
+        // One navaid feature (VOR+TACAN → VORTAC) and one designated-fix feature
+        // sharing the same IDENT "BAF".
+        let features = vec![
+            // Navaid component 1: VOR
+            json!({
+                "properties": {
+                    "IDENT": "BAF",
+                    "NAME": "BARNES MUNICIPAL",
+                    "LATITUDE": "42-09-43.053N",
+                    "LONGITUDE": "072-42-58.318W",
+                    "NAV_TYPE": 3,
+                    "FREQUENCY": 113.0,
+                    "NAVSYS_ID": "NAV-BAF",
+                    "US_AREA": "US"
+                }
+            }),
+            // Navaid component 2: TACAN
+            json!({
+                "properties": {
+                    "IDENT": "BAF",
+                    "NAME": "BARNES MUNICIPAL",
+                    "LATITUDE": "42-09-43.053N",
+                    "LONGITUDE": "072-42-58.318W",
+                    "NAV_TYPE": 4,
+                    "FREQUENCY": 113.0,
+                    "NAVSYS_ID": "NAV-BAF",
+                    "US_AREA": "US"
+                }
+            }),
+            // Designated fix (no NAV_TYPE) collocated with the VORTAC
+            json!({
+                "properties": {
+                    "IDENT": "BAF",
+                    "LATITUDE": "42-09-43.053N",
+                    "LONGITUDE": "072-42-58.318W",
+                    "TYPE_CODE": "RPT",
+                    "US_AREA": "US"
+                }
+            }),
+        ];
+
+        let (fixes, mut navaids) = arcgis_features_to_navpoints(&features);
+        // Replicate the merge done in FaaArcgisResolver::new
+        navaids.extend(fixes.iter().cloned());
+        navaids.sort_by(|a, b| a.code.cmp(&b.code).then(a.point_type.cmp(&b.point_type)));
+        navaids.dedup_by(|a, b| {
+            a.code == b.code && a.point_type == b.point_type && a.latitude == b.latitude && a.longitude == b.longitude
+        });
+
+        let mut navaid_index: HashMap<String, Vec<usize>> = HashMap::new();
+        for (i, n) in navaids.iter().enumerate() {
+            navaid_index.entry(n.code.clone()).or_default().push(i);
+        }
+
+        // There should be two "BAF" entries: the fix (kind="fix") and the navaid (kind="navaid")
+        let baf_indices = navaid_index.get("BAF").expect("BAF missing from index");
+        assert_eq!(baf_indices.len(), 2, "expected fix + navaid for BAF");
+
+        // resolve_navaid: must prefer kind=="navaid" → name should contain "BARNES"
+        let navaid_result = baf_indices
+            .iter()
+            .filter_map(|&i| navaids.get(i))
+            .find(|r| r.kind == "navaid")
+            .or_else(|| baf_indices.first().and_then(|&i| navaids.get(i)))
+            .expect("resolve_navaid returned None");
+        assert_eq!(navaid_result.kind, "navaid");
+        assert_eq!(navaid_result.point_type.as_deref(), Some("VORTAC"));
+        assert!(
+            navaid_result
+                .name
+                .as_deref()
+                .unwrap_or("")
+                .to_uppercase()
+                .contains("BARNES"),
+            "expected name to contain BARNES, got {:?}",
+            navaid_result.name
+        );
+
+        // resolve_fix: must prefer kind=="fix" → name should be the ident "BAF"
+        let fix_result = baf_indices
+            .iter()
+            .filter_map(|&i| navaids.get(i))
+            .find(|r| r.kind == "fix")
+            .or_else(|| baf_indices.first().and_then(|&i| navaids.get(i)))
+            .expect("resolve_fix returned None");
+        assert_eq!(fix_result.kind, "fix");
+        assert_eq!(fix_result.point_type.as_deref(), Some("RPT"));
     }
 
     #[test]
