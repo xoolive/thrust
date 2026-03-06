@@ -55,6 +55,22 @@ pub struct AirspaceRecord {
     pub source: String,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct AirspaceLayerRecord {
+    pub lower: Option<f64>,
+    pub upper: Option<f64>,
+    pub coordinates: Vec<(f64, f64)>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct AirspaceCompositeRecord {
+    pub designator: String,
+    pub name: Option<String>,
+    pub type_: Option<String>,
+    pub layers: Vec<AirspaceLayerRecord>,
+    pub source: String,
+}
+
 pub(crate) fn normalize_airway_name(value: &str) -> String {
     value
         .chars()

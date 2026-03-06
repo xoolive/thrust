@@ -5,20 +5,42 @@ use wasm_bindgen::prelude::*;
 use thrust::data::faa::nasr::{parse_airspaces_from_nasr_bytes, parse_field15_data_from_nasr_bytes};
 
 use crate::models::{
-    normalize_airway_name, normalize_point_code, point_kind, AirportRecord, AirspaceRecord, AirwayPointRecord,
-    AirwayRecord, NavpointRecord,
+    normalize_airway_name, normalize_point_code, point_kind, AirportRecord, AirspaceCompositeRecord,
+    AirspaceLayerRecord, AirspaceRecord, AirwayPointRecord, AirwayRecord, NavpointRecord,
 };
+
+fn compose_airspace(records: Vec<AirspaceRecord>) -> Option<AirspaceCompositeRecord> {
+    let first = records.first()?;
+    let designator = first.designator.clone();
+    let source = first.source.clone();
+    let name = records.iter().find_map(|r| r.name.clone());
+    let type_ = records.iter().find_map(|r| r.type_.clone());
+    let layers = records
+        .into_iter()
+        .map(|r| AirspaceLayerRecord {
+            lower: r.lower,
+            upper: r.upper,
+            coordinates: r.coordinates,
+        })
+        .collect();
+
+    Some(AirspaceCompositeRecord {
+        designator,
+        name,
+        type_,
+        layers,
+        source,
+    })
+}
 
 #[wasm_bindgen]
 pub struct NasrResolver {
     airports: Vec<AirportRecord>,
     navaids: Vec<NavpointRecord>,
-    fixes: Vec<NavpointRecord>,
     airways: Vec<AirwayRecord>,
     airspaces: Vec<AirspaceRecord>,
     airport_index: HashMap<String, Vec<usize>>,
     navaid_index: HashMap<String, Vec<usize>>,
-    fix_index: HashMap<String, Vec<usize>>,
     airway_index: HashMap<String, Vec<usize>>,
     airspace_index: HashMap<String, Vec<usize>>,
 }
@@ -185,8 +207,6 @@ impl NasrResolver {
             navaid_index.entry(n.identifier.clone()).or_default().push(i);
         }
 
-        let fix_index = navaid_index.clone();
-
         let mut airway_index: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, a) in airways.iter().enumerate() {
             airway_index.entry(normalize_airway_name(&a.name)).or_default().push(i);
@@ -200,13 +220,11 @@ impl NasrResolver {
 
         Ok(Self {
             airports,
-            fixes: navaids.clone(),
             navaids,
             airways,
             airspaces,
             airport_index,
             navaid_index,
-            fix_index,
             airway_index,
             airspace_index,
         })
@@ -233,7 +251,7 @@ impl NasrResolver {
     }
 
     pub fn fixes(&self) -> Result<JsValue, JsValue> {
-        serde_wasm_bindgen::to_value(&self.fixes).map_err(|e| JsValue::from_str(&e.to_string()))
+        serde_wasm_bindgen::to_value(&self.navaids).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     pub fn airways(&self) -> Result<JsValue, JsValue> {
@@ -241,7 +259,22 @@ impl NasrResolver {
     }
 
     pub fn airspaces(&self) -> Result<JsValue, JsValue> {
-        serde_wasm_bindgen::to_value(&self.airspaces).map_err(|e| JsValue::from_str(&e.to_string()))
+        let mut keys = self.airspace_index.keys().cloned().collect::<Vec<_>>();
+        keys.sort();
+        let rows = keys
+            .into_iter()
+            .filter_map(|key| {
+                let records = self
+                    .airspace_index
+                    .get(&key)
+                    .into_iter()
+                    .flat_map(|indices| indices.iter().copied())
+                    .filter_map(|idx| self.airspaces.get(idx).cloned())
+                    .collect::<Vec<_>>();
+                compose_airspace(records)
+            })
+            .collect::<Vec<_>>();
+        serde_wasm_bindgen::to_value(&rows).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     pub fn resolve_navaid(&self, code: String) -> Result<JsValue, JsValue> {
@@ -259,10 +292,10 @@ impl NasrResolver {
     pub fn resolve_fix(&self, code: String) -> Result<JsValue, JsValue> {
         let key = code.to_uppercase();
         let item = self
-            .fix_index
+            .navaid_index
             .get(&key)
             .and_then(|idx| idx.first().copied())
-            .and_then(|i| self.fixes.get(i))
+            .and_then(|i| self.navaids.get(i))
             .cloned();
 
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
@@ -282,13 +315,14 @@ impl NasrResolver {
 
     pub fn resolve_airspace(&self, designator: String) -> Result<JsValue, JsValue> {
         let key = designator.to_uppercase();
-        let item = self
+        let records = self
             .airspace_index
             .get(&key)
-            .and_then(|idx| idx.first().copied())
-            .and_then(|i| self.airspaces.get(i))
-            .cloned();
+            .into_iter()
+            .flat_map(|indices| indices.iter().copied())
+            .filter_map(|idx| self.airspaces.get(idx).cloned())
+            .collect::<Vec<_>>();
 
-        serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
+        serde_wasm_bindgen::to_value(&compose_airspace(records)).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 }

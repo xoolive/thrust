@@ -2,10 +2,14 @@ use std::collections::{HashMap, HashSet};
 use std::io::{BufReader, Cursor, Read};
 
 use quick_xml::{events::Event, name::QName, Reader};
+use thrust::data::eurocontrol::ddr::airspaces::{parse_are_bytes, parse_sls_bytes, DdrSectorLayer};
 use wasm_bindgen::prelude::*;
 use zip::read::ZipArchive;
 
-use crate::models::{normalize_airway_name, AirportRecord, AirwayPointRecord, AirwayRecord, NavpointRecord};
+use crate::models::{
+    normalize_airway_name, AirportRecord, AirspaceCompositeRecord, AirspaceLayerRecord, AirspaceRecord,
+    AirwayPointRecord, AirwayRecord, NavpointRecord,
+};
 
 const AIXM_EXPECTED_FILES: [&str; 10] = [
     "AirportHeliport.BASELINE.zip",
@@ -30,6 +34,13 @@ const DDR_EXPECTED_FILES: [&str; 8] = [
     "free_route.sls",
     "free_route.frp",
 ];
+
+// DDR routes are grouped by airway name, which can merge distinct route variants
+// into a single sequence. We split a chain only when a consecutive leg is an
+// extreme geodesic jump, using a conservative fixed cutoff. Empirical analysis
+// on AIRAC_484E showed >=1000 NM gives near-zero same-name AIXM segment matches
+// while still catching obvious merges (for example A10: *PR13 -> SIT).
+const DDR_AIRWAY_SPLIT_GAP_NM: f64 = 1_000.0;
 
 type DynError = Box<dyn std::error::Error>;
 type PointRefIndex = HashMap<String, AirwayPointRecord>;
@@ -590,7 +601,9 @@ fn parse_ddr_airports(text: &str) -> Vec<AirportRecord> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_ddr_airports;
+    use std::collections::HashMap;
+
+    use super::{parse_ddr_airports, parse_ddr_airspaces, parse_ddr_airways};
 
     #[test]
     fn parse_lfbo_coordinates_from_ddr_arp() {
@@ -600,10 +613,109 @@ mod tests {
         assert!((lfbo.latitude - 43.635).abs() < 1e-9);
         assert!((lfbo.longitude - 1.3677777833333334).abs() < 1e-9);
     }
+
+    #[test]
+    fn split_ddr_airway_on_very_large_gap() {
+        let mut point_lookup: HashMap<String, (f64, f64, String)> = HashMap::new();
+        point_lookup.insert("YJQ".to_string(), (10.0, 10.0, "fix".to_string()));
+        point_lookup.insert("MITEK".to_string(), (10.0, 11.0, "fix".to_string()));
+        point_lookup.insert("*PR13".to_string(), (10.0, 12.0, "point".to_string()));
+        point_lookup.insert("SIT".to_string(), (55.0, 120.0, "fix".to_string()));
+        point_lookup.insert("PAXIS".to_string(), (55.0, 121.0, "fix".to_string()));
+
+        let text = [
+            "L;A10;AR;999999999999;000000000000;YJQ;SP;1",
+            "L;A10;AR;999999999999;000000000000;MITEK;SP;2",
+            "L;A10;AR;999999999999;000000000000;*PR13;DBP;3",
+            "L;A10;AR;999999999999;000000000000;SIT;SP;4",
+            "L;A10;AR;999999999999;000000000000;PAXIS;SP;5",
+        ]
+        .join("\n");
+
+        let airways = parse_ddr_airways(&text, &point_lookup);
+        assert_eq!(airways.len(), 2);
+        assert_eq!(airways[0].name, "A10");
+        assert_eq!(airways[1].name, "A10");
+        assert_eq!(airways[0].points.len(), 3);
+        assert_eq!(airways[1].points.len(), 2);
+        assert_eq!(airways[0].points[0].code, "YJQ");
+        assert_eq!(airways[0].points[2].code, "*PR13");
+        assert_eq!(airways[1].points[0].code, "SIT");
+        assert_eq!(airways[1].points[1].code, "PAXIS");
+    }
+
+    #[test]
+    fn keep_ddr_airway_when_gaps_are_reasonable() {
+        let mut point_lookup: HashMap<String, (f64, f64, String)> = HashMap::new();
+        point_lookup.insert("A".to_string(), (43.6, 1.4, "fix".to_string()));
+        point_lookup.insert("B".to_string(), (44.0, 2.0, "fix".to_string()));
+        point_lookup.insert("C".to_string(), (44.5, 3.0, "fix".to_string()));
+
+        let text = [
+            "L;UM605;AR;999999999999;000000000000;A;SP;1",
+            "L;UM605;AR;999999999999;000000000000;B;SP;2",
+            "L;UM605;AR;999999999999;000000000000;C;SP;3",
+        ]
+        .join("\n");
+
+        let airways = parse_ddr_airways(&text, &point_lookup);
+        assert_eq!(airways.len(), 1);
+        assert_eq!(airways[0].name, "UM605");
+        assert_eq!(airways[0].points.len(), 3);
+    }
+
+    #[test]
+    fn parse_ddr_airspaces_from_are_and_sls_text() {
+        let mut files = HashMap::new();
+        files.insert(
+            "sectors.are".to_string(),
+            ["3 SEC1_POLY", "0 0", "0 60", "60 60"].join("\n"),
+        );
+        files.insert("sectors.sls".to_string(), ["SEC1 X SEC1_POLY 100 200"].join("\n"));
+        files.insert(
+            "free_route.are".to_string(),
+            ["3 FRA1_POLY", "120 0", "120 60", "180 60"].join("\n"),
+        );
+        files.insert("free_route.sls".to_string(), ["FRA1 X FRA1_POLY 245 660"].join("\n"));
+
+        let airspaces = parse_ddr_airspaces(&files).expect("DDR airspace parsing should succeed");
+        assert_eq!(airspaces.len(), 2);
+        assert_eq!(airspaces[0].designator, "SEC1");
+        assert_eq!(airspaces[0].type_.as_deref(), Some("SECTOR"));
+        assert_eq!(airspaces[1].designator, "FRA1");
+        assert_eq!(airspaces[1].type_.as_deref(), Some("FRA"));
+    }
+
+    #[test]
+    fn parse_ddr_airspaces_enriches_with_spc_collapsed_designators() {
+        let mut files = HashMap::new();
+        files.insert("sectors.are".to_string(), ["3 P1", "0 0", "0 60", "60 60"].join("\n"));
+        files.insert("sectors.sls".to_string(), ["LFBBN1 X P1 195 295"].join("\n"));
+        files.insert(
+            "sectors.spc".to_string(),
+            ["A;LFBBCTA;BORDEAUX U/ACC;AUA;42;_", "S;LFBBN1;ES"].join("\n"),
+        );
+        files.insert(
+            "free_route.are".to_string(),
+            ["3 FRA1_POLY", "120 0", "120 60", "180 60"].join("\n"),
+        );
+        files.insert("free_route.sls".to_string(), ["FRA1 X FRA1_POLY 245 660"].join("\n"));
+
+        let airspaces = parse_ddr_airspaces(&files).expect("DDR airspace parsing should succeed");
+        assert!(airspaces.iter().any(|a| a.designator == "LFBBN1"));
+        let collapsed = airspaces
+            .iter()
+            .find(|a| a.designator == "LFBBCTA")
+            .expect("Collapsed LFBBCTA should be present");
+        assert_eq!(collapsed.name.as_deref(), Some("BORDEAUX U/ACC"));
+        assert_eq!(collapsed.type_.as_deref(), Some("AUA"));
+        assert_eq!(collapsed.lower, Some(195.0));
+        assert_eq!(collapsed.upper, Some(295.0));
+    }
 }
 
 fn parse_ddr_airways(text: &str, point_lookup: &HashMap<String, (f64, f64, String)>) -> Vec<AirwayRecord> {
-    let mut grouped: HashMap<String, Vec<(i32, AirwayPointRecord)>> = HashMap::new();
+    let mut grouped: HashMap<String, Vec<(i32, AirwayPointRecord, bool)>> = HashMap::new();
     let mut route_class_by_name: HashMap<String, String> = HashMap::new();
     for line in text.lines() {
         let line = line.trim();
@@ -618,10 +730,10 @@ fn parse_ddr_airways(text: &str, point_lookup: &HashMap<String, (f64, f64, Strin
         let route_class = fields[2].trim().to_uppercase();
         let navaid = fields[5].trim().to_uppercase();
         let seq = fields[7].trim().parse::<i32>().unwrap_or(0);
-        let (lat, lon, kind) = point_lookup
-            .get(&navaid)
-            .cloned()
-            .unwrap_or((0.0, 0.0, "point".to_string()));
+        let (lat, lon, kind, has_coords) = match point_lookup.get(&navaid) {
+            Some((lat, lon, kind)) => (*lat, *lon, kind.clone(), true),
+            None => (0.0, 0.0, "point".to_string(), false),
+        };
 
         route_class_by_name.entry(route.clone()).or_insert(route_class);
 
@@ -634,29 +746,225 @@ fn parse_ddr_airways(text: &str, point_lookup: &HashMap<String, (f64, f64, Strin
                 latitude: lat,
                 longitude: lon,
             },
+            has_coords,
         ));
     }
 
     let mut out = Vec::new();
     for (name, mut points) in grouped {
-        points.sort_by_key(|(seq, _)| *seq);
-        let deduped = points
-            .into_iter()
-            .map(|(_, p)| p)
-            .fold(Vec::<AirwayPointRecord>::new(), |mut acc, p| {
-                if acc.last().map(|x| x.code.as_str()) != Some(p.code.as_str()) {
-                    acc.push(p);
+        points.sort_by_key(|(seq, _, _)| *seq);
+        let deduped = points.into_iter().map(|(_, p, has_coords)| (p, has_coords)).fold(
+            Vec::<(AirwayPointRecord, bool)>::new(),
+            |mut acc, (p, has_coords)| {
+                if acc.last().map(|(x, _)| x.code.as_str()) != Some(p.code.as_str()) {
+                    acc.push((p, has_coords));
                 }
                 acc
+            },
+        );
+
+        if deduped.is_empty() {
+            continue;
+        }
+
+        let mut variants: Vec<Vec<AirwayPointRecord>> = vec![vec![deduped[0].0.clone()]];
+        for idx in 1..deduped.len() {
+            let (prev, prev_has_coords) = &deduped[idx - 1];
+            let (point, has_coords) = &deduped[idx];
+            let split_here = *prev_has_coords
+                && *has_coords
+                && great_circle_distance_nm(prev.latitude, prev.longitude, point.latitude, point.longitude)
+                    >= DDR_AIRWAY_SPLIT_GAP_NM;
+
+            if split_here {
+                variants.push(vec![point.clone()]);
+            } else if let Some(current) = variants.last_mut() {
+                current.push(point.clone());
+            }
+        }
+
+        let route_class = route_class_by_name.get(&name).cloned();
+        for points in variants.into_iter().filter(|points| points.len() >= 2) {
+            out.push(AirwayRecord {
+                route_class: route_class.clone(),
+                name: name.clone(),
+                source: "eurocontrol_ddr".to_string(),
+                points,
             });
-        out.push(AirwayRecord {
-            route_class: route_class_by_name.get(&name).cloned(),
-            name,
-            source: "eurocontrol_ddr".to_string(),
-            points: deduped,
-        });
+        }
     }
     out
+}
+
+fn ddr_layers_to_airspaces(layers: Vec<DdrSectorLayer>, type_name: &str) -> Vec<AirspaceRecord> {
+    layers
+        .into_iter()
+        .map(|layer| AirspaceRecord {
+            designator: layer.designator,
+            name: Some(layer.polygon_name),
+            type_: Some(type_name.to_string()),
+            lower: Some(layer.lower),
+            upper: Some(layer.upper),
+            coordinates: layer.coordinates,
+            source: "eurocontrol_ddr".to_string(),
+        })
+        .collect()
+}
+
+fn parse_ddr_collapsed_sectors(text: &str) -> Vec<(String, String, Option<String>, Option<String>)> {
+    let mut out = Vec::new();
+    let mut current_designator = String::new();
+    let mut current_name: Option<String> = None;
+    let mut current_type: Option<String> = None;
+
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fields: Vec<&str> = line.split(';').collect();
+        if fields.is_empty() {
+            continue;
+        }
+
+        match fields[0] {
+            "A" if fields.len() >= 4 => {
+                current_designator = fields[1].trim().to_uppercase();
+                current_name = Some(fields[2].trim().to_string()).filter(|v| !v.is_empty() && v != "_");
+                current_type = Some(fields[3].trim().to_string()).filter(|v| !v.is_empty() && v != "_");
+            }
+            "S" if fields.len() >= 2 && !current_designator.is_empty() => {
+                out.push((
+                    current_designator.clone(),
+                    fields[1].trim().to_uppercase(),
+                    current_name.clone(),
+                    current_type.clone(),
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    out
+}
+
+fn enrich_sector_airspaces_with_spc(sector_airspaces: &[AirspaceRecord], spc_text: &str) -> Vec<AirspaceRecord> {
+    let mappings = parse_ddr_collapsed_sectors(spc_text);
+    if mappings.is_empty() {
+        return Vec::new();
+    }
+
+    let mut by_component: HashMap<String, Vec<&AirspaceRecord>> = HashMap::new();
+    for layer in sector_airspaces {
+        by_component
+            .entry(layer.designator.to_uppercase())
+            .or_default()
+            .push(layer);
+    }
+
+    let mut out = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for (designator, component, name, type_name) in mappings {
+        let Some(component_layers) = by_component.get(&component) else {
+            continue;
+        };
+
+        for layer in component_layers {
+            let record = AirspaceRecord {
+                designator: designator.clone(),
+                name: name.clone().or_else(|| layer.name.clone()),
+                type_: type_name.clone().or_else(|| layer.type_.clone()),
+                lower: layer.lower,
+                upper: layer.upper,
+                coordinates: layer.coordinates.clone(),
+                source: "eurocontrol_ddr".to_string(),
+            };
+
+            let first = record.coordinates.first().copied().unwrap_or((0.0, 0.0));
+            let sig = format!(
+                "{}|{}|{}|{}|{}|{}|{}|{}",
+                record.designator,
+                record.name.as_deref().unwrap_or(""),
+                record.type_.as_deref().unwrap_or(""),
+                record.lower.unwrap_or(-1.0),
+                record.upper.unwrap_or(-1.0),
+                record.coordinates.len(),
+                first.0,
+                first.1
+            );
+            if seen.insert(sig) {
+                out.push(record);
+            }
+        }
+    }
+
+    out
+}
+
+fn parse_ddr_airspaces(files: &HashMap<String, String>) -> Result<Vec<AirspaceRecord>, JsValue> {
+    let sectors_are = files
+        .get("sectors.are")
+        .ok_or_else(|| JsValue::from_str("missing sectors.are"))?;
+    let sectors_sls = files
+        .get("sectors.sls")
+        .ok_or_else(|| JsValue::from_str("missing sectors.sls"))?;
+    let sectors_polygons = parse_are_bytes(sectors_are.as_bytes()).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let sector_layers =
+        parse_sls_bytes(sectors_sls.as_bytes(), &sectors_polygons).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let free_route_are = files
+        .get("free_route.are")
+        .ok_or_else(|| JsValue::from_str("missing free_route.are"))?;
+    let free_route_sls = files
+        .get("free_route.sls")
+        .ok_or_else(|| JsValue::from_str("missing free_route.sls"))?;
+    let free_route_polygons =
+        parse_are_bytes(free_route_are.as_bytes()).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let free_route_layers = parse_sls_bytes(free_route_sls.as_bytes(), &free_route_polygons)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let sector_airspaces = ddr_layers_to_airspaces(sector_layers, "SECTOR");
+    let mut out = sector_airspaces.clone();
+    if let Some(sectors_spc) = files.get("sectors.spc") {
+        out.extend(enrich_sector_airspaces_with_spc(&sector_airspaces, sectors_spc));
+    }
+    out.extend(ddr_layers_to_airspaces(free_route_layers, "FRA"));
+    Ok(out)
+}
+
+fn compose_airspace(records: Vec<AirspaceRecord>) -> Option<AirspaceCompositeRecord> {
+    let first = records.first()?;
+    let designator = first.designator.clone();
+    let source = first.source.clone();
+    let name = records.iter().find_map(|r| r.name.clone());
+    let type_ = records.iter().find_map(|r| r.type_.clone());
+    let layers = records
+        .into_iter()
+        .map(|r| AirspaceLayerRecord {
+            lower: r.lower,
+            upper: r.upper,
+            coordinates: r.coordinates,
+        })
+        .collect();
+
+    Some(AirspaceCompositeRecord {
+        designator,
+        name,
+        type_,
+        layers,
+        source,
+    })
+}
+
+fn great_circle_distance_nm(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let radius_nm = 3440.065_f64;
+    let phi1 = lat1.to_radians();
+    let phi2 = lat2.to_radians();
+    let dphi = (lat2 - lat1).to_radians();
+    let dlambda = (lon2 - lon1).to_radians();
+    let a = (dphi / 2.0).sin() * (dphi / 2.0).sin()
+        + phi1.cos() * phi2.cos() * (dlambda / 2.0).sin() * (dlambda / 2.0).sin();
+    2.0 * radius_nm * a.sqrt().asin()
 }
 
 fn file_basename(name: &str) -> &str {
@@ -725,6 +1033,11 @@ fn ddr_file_key_and_matchers() -> [DdrEntryMatcher; 8] {
     ]
 }
 
+fn sectors_spc_matcher(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.starts_with("sectors_") && lower.ends_with(".spc")
+}
+
 fn build_from_ddr_text_files(files: HashMap<String, String>) -> Result<EurocontrolResolver, JsValue> {
     for name in DDR_EXPECTED_FILES {
         if !files.contains_key(name) {
@@ -755,8 +1068,9 @@ fn build_from_ddr_text_files(files: HashMap<String, String>) -> Result<Eurocontr
             .ok_or_else(|| JsValue::from_str("missing routes.routes"))?,
         &point_lookup,
     );
+    let airspaces = parse_ddr_airspaces(&files)?;
 
-    EurocontrolResolver::build(airports, navaids, airways)
+    EurocontrolResolver::build(airports, navaids, airways, airspaces)
 }
 
 #[wasm_bindgen]
@@ -764,9 +1078,11 @@ pub struct EurocontrolResolver {
     airports: Vec<AirportRecord>,
     navaids: Vec<NavpointRecord>,
     airways: Vec<AirwayRecord>,
+    airspaces: Vec<AirspaceRecord>,
     airport_index: HashMap<String, Vec<usize>>,
     navaid_index: HashMap<String, Vec<usize>>,
     airway_index: HashMap<String, Vec<usize>>,
+    airspace_index: HashMap<String, Vec<usize>>,
 }
 
 #[wasm_bindgen]
@@ -815,7 +1131,7 @@ impl EurocontrolResolver {
         )
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        Self::build(airports, navaids, airways)
+        Self::build(airports, navaids, airways, Vec::new())
     }
 
     #[wasm_bindgen(js_name = fromDdrFolder)]
@@ -833,6 +1149,9 @@ impl EurocontrolResolver {
                 .map_err(|_| JsValue::from_str(&format!("missing DDR file for key '{key}' in archive payload")))?;
             files.insert(key.to_string(), text);
         }
+        if let Ok(text) = find_zip_text_entry(&ddr_archive, sectors_spc_matcher) {
+            files.insert("sectors.spc".to_string(), text);
+        }
         build_from_ddr_text_files(files)
     }
 
@@ -840,6 +1159,7 @@ impl EurocontrolResolver {
         airports: Vec<AirportRecord>,
         mut navaids: Vec<NavpointRecord>,
         airways: Vec<AirwayRecord>,
+        airspaces: Vec<AirspaceRecord>,
     ) -> Result<EurocontrolResolver, JsValue> {
         let mut seen = HashSet::new();
         navaids.retain(|n| {
@@ -875,13 +1195,20 @@ impl EurocontrolResolver {
             airway_index.entry(a.name.to_uppercase()).or_default().push(i);
         }
 
+        let mut airspace_index: HashMap<String, Vec<usize>> = HashMap::new();
+        for (i, a) in airspaces.iter().enumerate() {
+            airspace_index.entry(a.designator.to_uppercase()).or_default().push(i);
+        }
+
         Ok(EurocontrolResolver {
             airports,
             navaids,
             airways,
+            airspaces,
             airport_index,
             navaid_index,
             airway_index,
+            airspace_index,
         })
     }
 
@@ -899,6 +1226,25 @@ impl EurocontrolResolver {
 
     pub fn airways(&self) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(&self.airways).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    pub fn airspaces(&self) -> Result<JsValue, JsValue> {
+        let mut keys = self.airspace_index.keys().cloned().collect::<Vec<_>>();
+        keys.sort();
+        let rows = keys
+            .into_iter()
+            .filter_map(|key| {
+                let records = self
+                    .airspace_index
+                    .get(&key)
+                    .into_iter()
+                    .flat_map(|indices| indices.iter().copied())
+                    .filter_map(|idx| self.airspaces.get(idx).cloned())
+                    .collect::<Vec<_>>();
+                compose_airspace(records)
+            })
+            .collect::<Vec<_>>();
+        serde_wasm_bindgen::to_value(&rows).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     pub fn resolve_airport(&self, code: String) -> Result<JsValue, JsValue> {
@@ -943,5 +1289,17 @@ impl EurocontrolResolver {
             .and_then(|i| self.airways.get(i))
             .cloned();
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    pub fn resolve_airspace(&self, designator: String) -> Result<JsValue, JsValue> {
+        let key = designator.to_uppercase();
+        let records = self
+            .airspace_index
+            .get(&key)
+            .into_iter()
+            .flat_map(|indices| indices.iter().copied())
+            .filter_map(|idx| self.airspaces.get(idx).cloned())
+            .collect::<Vec<_>>();
+        serde_wasm_bindgen::to_value(&compose_airspace(records)).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 }
