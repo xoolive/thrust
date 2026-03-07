@@ -9,7 +9,7 @@
     "test": "tsx test/run.ts"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.11.0",
     "eslint": "^10.0.3",
     "globals": "^16.4.0",
