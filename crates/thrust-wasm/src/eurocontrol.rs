@@ -1302,4 +1302,185 @@ impl EurocontrolResolver {
             .collect::<Vec<_>>();
         serde_wasm_bindgen::to_value(&compose_airspace(records)).map_err(|e| JsValue::from_str(&e.to_string()))
     }
+
+    /// Parse and resolve a raw ICAO field 15 route string into a sequence of geographic segments.
+    ///
+    /// Returns a JS array of `{ start, end, name? }` objects where `start` and `end` are
+    /// `{ latitude, longitude, name?, kind? }` resolved geographic points.
+    ///
+    /// Points are resolved against the resolver's navaid/airport indices. Airways are expanded
+    /// to their constituent waypoints. Direct (DCT) segments connect the previous resolved point
+    /// to the next one. SID/STAR designators are not expanded (no procedure leg data available).
+    #[wasm_bindgen(js_name = enrichRoute)]
+    pub fn enrich_route(&self, route: String) -> Result<JsValue, JsValue> {
+        use crate::field15::ResolvedPoint as WasmPoint;
+        use crate::field15::RouteSegment;
+        use thrust::data::field15::{Connector, Field15Element, Field15Parser, Point};
+
+        let elements = Field15Parser::parse(&route);
+        let mut segments: Vec<RouteSegment> = Vec::new();
+        let mut last_point: Option<WasmPoint> = None;
+        // When we encounter an airway connector we store it here together with
+        // the entry point so we can slice correctly once the exit point is known.
+        let mut pending_airway: Option<(String, WasmPoint)> = None;
+        let mut current_connector: Option<String> = None;
+
+        let resolve_code = |code: &str| -> Option<WasmPoint> {
+            let key = code.to_uppercase();
+            if let Some(idx) = self.airport_index.get(&key).and_then(|v| v.first()) {
+                if let Some(a) = self.airports.get(*idx) {
+                    return Some(WasmPoint {
+                        latitude: a.latitude,
+                        longitude: a.longitude,
+                        name: Some(a.code.clone()),
+                        kind: Some("airport".to_string()),
+                    });
+                }
+            }
+            if let Some(idx) = self.navaid_index.get(&key).and_then(|v| v.first()) {
+                if let Some(n) = self.navaids.get(*idx) {
+                    return Some(WasmPoint {
+                        latitude: n.latitude,
+                        longitude: n.longitude,
+                        name: Some(n.code.clone()),
+                        kind: Some(n.kind.clone()),
+                    });
+                }
+            }
+            None
+        };
+
+        // Expand a pending airway from `entry` to `exit` using the airway's point list.
+        // Finds entry and exit by name, then walks forward or backward between them.
+        // Returns true if expansion succeeded; false means the caller should fall back
+        // to a direct segment labelled with the airway name.
+        let expand_airway =
+            |airway_name: &str, entry: &WasmPoint, exit: &WasmPoint, segs: &mut Vec<RouteSegment>| -> bool {
+                let key = crate::models::normalize_airway_name(airway_name);
+                let airway = match self
+                    .airway_index
+                    .get(&key)
+                    .and_then(|v| v.first())
+                    .and_then(|i| self.airways.get(*i))
+                {
+                    Some(a) => a,
+                    None => return false,
+                };
+
+                let pts = &airway.points;
+
+                // Find entry and exit positions by name (case-insensitive).
+                let entry_name = entry.name.as_deref().unwrap_or("").to_uppercase();
+                let exit_name = exit.name.as_deref().unwrap_or("").to_uppercase();
+
+                let entry_pos = pts.iter().position(|p| p.code.to_uppercase() == entry_name);
+                let exit_pos = pts.iter().position(|p| p.code.to_uppercase() == exit_name);
+
+                let (from, to) = match (entry_pos, exit_pos) {
+                    (Some(f), Some(t)) => (f, t),
+                    _ => return false, // one or both endpoints not in this airway
+                };
+
+                // Build the slice going forward or backward.
+                let slice: Vec<&crate::models::AirwayPointRecord> = if from <= to {
+                    pts[from..=to].iter().collect()
+                } else {
+                    pts[to..=from].iter().rev().collect()
+                };
+
+                if slice.len() < 2 {
+                    return false;
+                }
+
+                // The first point in the slice IS the entry — use the already-resolved
+                // entry WasmPoint so coordinates are consistent with what we already emitted.
+                let mut prev = entry.clone();
+                for pt in &slice[1..] {
+                    let next = WasmPoint {
+                        latitude: pt.latitude,
+                        longitude: pt.longitude,
+                        name: Some(pt.code.clone()),
+                        kind: Some(pt.kind.clone()),
+                    };
+                    segs.push(RouteSegment {
+                        start: prev,
+                        end: next.clone(),
+                        name: Some(airway_name.to_string()),
+                    });
+                    prev = next;
+                }
+                true
+            };
+
+        for element in &elements {
+            match element {
+                Field15Element::Point(point) => {
+                    let resolved = match point {
+                        Point::Waypoint(name) | Point::Aerodrome(name) => resolve_code(name),
+                        Point::Coordinates((lat, lon)) => Some(WasmPoint {
+                            latitude: *lat,
+                            longitude: *lon,
+                            name: None,
+                            kind: Some("coords".to_string()),
+                        }),
+                        Point::BearingDistance { point, .. } => match point.as_ref() {
+                            Point::Waypoint(name) | Point::Aerodrome(name) => resolve_code(name),
+                            Point::Coordinates((lat, lon)) => Some(WasmPoint {
+                                latitude: *lat,
+                                longitude: *lon,
+                                name: None,
+                                kind: Some("coords".to_string()),
+                            }),
+                            _ => None,
+                        },
+                    };
+                    if let Some(exit) = resolved {
+                        if let Some((airway_name, entry)) = pending_airway.take() {
+                            // Try to expand the airway between entry and exit.
+                            let expanded = expand_airway(&airway_name, &entry, &exit, &mut segments);
+                            if !expanded {
+                                // Fall back: single labelled segment entry → exit.
+                                segments.push(RouteSegment {
+                                    start: entry,
+                                    end: exit.clone(),
+                                    name: Some(airway_name),
+                                });
+                            }
+                        } else if let Some(prev) = last_point.take() {
+                            segments.push(RouteSegment {
+                                start: prev,
+                                end: exit.clone(),
+                                name: current_connector.take(),
+                            });
+                        } else {
+                            current_connector = None;
+                        }
+                        last_point = Some(exit);
+                    }
+                }
+                Field15Element::Connector(connector) => match connector {
+                    Connector::Airway(name) => {
+                        // Stash the airway name and current last_point as entry.
+                        // We need the exit point (next Point token) to slice correctly.
+                        if let Some(entry) = last_point.take() {
+                            pending_airway = Some((name.clone(), entry));
+                        } else {
+                            // No entry point yet — treat as a labelled connector.
+                            current_connector = Some(name.clone());
+                        }
+                    }
+                    Connector::Direct => {
+                        current_connector = None;
+                    }
+                    Connector::Sid(name) | Connector::Star(name) => {
+                        current_connector = Some(name.clone());
+                    }
+                    _ => {}
+                },
+                Field15Element::Modifier(_) => {}
+            }
+        }
+
+        serde_wasm_bindgen::to_value(&segments).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
 }

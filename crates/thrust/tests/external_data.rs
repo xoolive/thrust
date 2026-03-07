@@ -408,8 +408,183 @@ fn faa_nasr_entities_are_present() {
         "missing NASR navaid BAF VOR/DME"
     );
 
+    // KLAX coordinates (NASR 2026-03-19 ground truth)
+    let klax = parsed
+        .points
+        .iter()
+        .find(|p| p.kind == "AIRPORT" && p.identifier.eq_ignore_ascii_case("KLAX"))
+        .expect("missing NASR KLAX airport");
     assert!(
-        parsed.airways.iter().any(|a| a.airway_name.eq_ignore_ascii_case("J48")),
-        "missing NASR route J48"
+        (klax.latitude - 33.94249638_f64).abs() < 1e-4,
+        "KLAX lat off: {}",
+        klax.latitude
     );
+    assert!(
+        (klax.longitude - (-118.40804861_f64)).abs() < 1e-4,
+        "KLAX lon off: {}",
+        klax.longitude
+    );
+
+    // BASYE fix coordinates (NASR 2026-03-19 ground truth)
+    let basye = parsed
+        .points
+        .iter()
+        .find(|p| p.kind == "FIX" && p.identifier.eq_ignore_ascii_case("BASYE"))
+        .expect("missing NASR fix BASYE");
+    assert!(
+        (basye.latitude - 41.34372222_f64).abs() < 1e-4,
+        "BASYE lat off: {}",
+        basye.latitude
+    );
+    assert!(
+        (basye.longitude - (-73.79860833_f64)).abs() < 1e-4,
+        "BASYE lon off: {}",
+        basye.longitude
+    );
+
+    // BAF VORTAC coordinates, name, and point_type (NASR 2026-03-19 ground truth)
+    let baf = parsed
+        .points
+        .iter()
+        .find(|p| {
+            p.kind == "NAVAID"
+                && p.identifier.to_uppercase().starts_with("BAF:")
+                && p.point_type.as_deref().unwrap_or("").to_uppercase().contains("VOR")
+        })
+        .expect("missing NASR navaid BAF VORTAC");
+    assert!(
+        baf.name
+            .as_deref()
+            .map(|n| n.to_uppercase().contains("BARNES"))
+            .unwrap_or(false),
+        "BAF name should contain BARNES, got {:?}",
+        baf.name
+    );
+    assert!(
+        (baf.latitude - 42.16195908_f64).abs() < 1e-4,
+        "BAF lat off: {}",
+        baf.latitude
+    );
+    assert!(
+        (baf.longitude - (-72.7161995_f64)).abs() < 1e-4,
+        "BAF lon off: {}",
+        baf.longitude
+    );
+
+    // J48 airway — collect and order the segment chain, then verify waypoint sequence
+    // and LANNA fix coordinates.
+    {
+        let mut j48_segs: Vec<_> = parsed
+            .airways
+            .iter()
+            .filter(|a| a.airway_name.eq_ignore_ascii_case("J48"))
+            .collect();
+        assert!(!j48_segs.is_empty(), "missing NASR route J48");
+
+        // Sort segments by chaining: find the segment whose from_point is not any
+        // other segment's to_point (= the first segment), then follow the chain.
+        j48_segs.sort_by_key(|s| s.airway_id.clone());
+        let ordered = chain_airway_segments(&j48_segs);
+        assert_eq!(
+            ordered,
+            vec!["LANNA", "PTW", "BYRDD", "HAAGN", "PENSY", "EMI", "CSN", "MOL"],
+            "J48 waypoint sequence mismatch"
+        );
+
+        // LANNA fix coordinates
+        let lanna = parsed
+            .points
+            .iter()
+            .find(|p| p.identifier.eq_ignore_ascii_case("LANNA"))
+            .expect("missing NASR fix LANNA");
+        assert!(
+            (lanna.latitude - 40.55974166_f64).abs() < 1e-4,
+            "LANNA lat off: {}",
+            lanna.latitude
+        );
+        assert!(
+            (lanna.longitude - (-75.027725_f64)).abs() < 1e-4,
+            "LANNA lon off: {}",
+            lanna.longitude
+        );
+    }
+
+    // Q448 airway — waypoint sequence and BASYE coordinate within the airway.
+    // Note: in the raw AWY_BASE.csv, Q-routes have AWY_DESIGNATION="RN", so
+    // build_airway_name("RN", "Q448") produces "RNQ448".  The WASM NasrResolver
+    // re-maps "Q448" → "RNQ448" transparently; in the Rust layer we use the raw name.
+    {
+        let mut q448_segs: Vec<_> = parsed
+            .airways
+            .iter()
+            .filter(|a| a.airway_name.eq_ignore_ascii_case("RNQ448"))
+            .collect();
+        assert!(!q448_segs.is_empty(), "missing NASR route RNQ448 (Q448 RNAV route)");
+
+        q448_segs.sort_by_key(|s| s.airway_id.clone());
+        let ordered = chain_airway_segments(&q448_segs);
+        assert_eq!(
+            ordered,
+            vec!["PTW", "LANNA", "DBABE", "BASYE", "TRIBS", "BIGGO", "BAF"],
+            "Q448 waypoint sequence mismatch"
+        );
+
+        // BASYE is the 4th waypoint (index 3) — its coordinates come from the points vec
+        let basye_in_q448 = parsed
+            .points
+            .iter()
+            .find(|p| p.kind == "FIX" && p.identifier.eq_ignore_ascii_case("BASYE"))
+            .expect("missing NASR fix BASYE for Q448 coordinate check");
+        assert!(
+            (basye_in_q448.latitude - 41.34372222_f64).abs() < 1e-4,
+            "BASYE lat in Q448 context off: {}",
+            basye_in_q448.latitude
+        );
+        assert!(
+            (basye_in_q448.longitude - (-73.79860833_f64)).abs() < 1e-4,
+            "BASYE lon in Q448 context off: {}",
+            basye_in_q448.longitude
+        );
+    }
+}
+
+/// Reconstruct an ordered waypoint list from a slice of airway segments.
+///
+/// The segments are stored as directed `from_point → to_point` pairs (already
+/// sorted by `airway_id` before calling this function).  We find the unique
+/// starting point (one whose code never appears as a `to_point`) and then walk
+/// the chain.  If the chain is unexpectedly disconnected the function returns
+/// whatever it managed to collect.
+fn chain_airway_segments(segs: &[&thrust::data::faa::nasr::NasrAirwaySegment]) -> Vec<String> {
+    use std::collections::HashMap;
+
+    if segs.is_empty() {
+        return vec![];
+    }
+
+    // Build a from_point → to_point map and find the entry point.
+    let to_points: HashSet<_> = segs.iter().map(|s| s.to_point.as_str()).collect();
+    let start: &thrust::data::faa::nasr::NasrAirwaySegment = segs
+        .iter()
+        .find(|s| !to_points.contains(s.from_point.as_str()))
+        .copied()
+        .unwrap_or(segs[0]);
+
+    let next: HashMap<&str, &str> = segs
+        .iter()
+        .map(|s| (s.from_point.as_str(), s.to_point.as_str()))
+        .collect();
+
+    let mut result = vec![start.from_point.clone()];
+    let mut current = start.from_point.as_str();
+    for _ in 0..segs.len() {
+        match next.get(current) {
+            Some(&nxt) => {
+                result.push(nxt.to_string());
+                current = nxt;
+            }
+            None => break,
+        }
+    }
+    result
 }
