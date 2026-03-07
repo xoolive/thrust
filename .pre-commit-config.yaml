@@ -1,0 +1,60 @@
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt-check
+        name: cargo fmt --all --check
+        entry: cargo fmt --all --check
+        language: system
+        pass_filenames: false
+        files: '^(crates/.+\.rs|Cargo\.toml|Cargo\.lock)$'
+
+      - id: cargo-clippy-all-features
+        name: cargo clippy --workspace --all-features --all-targets -- -D warnings
+        entry: cargo clippy --workspace --all-features --all-targets -- -D warnings
+        language: system
+        pass_filenames: false
+        require_serial: true
+        files: '^(crates/.+\.rs|Cargo\.toml|Cargo\.lock)$'
+
+      - id: python-ruff-format-check
+        name: uv run ruff format --check .
+        entry: bash -lc 'cd python && uv run ruff format --check .'
+        language: system
+        pass_filenames: false
+        files: '^python/.+\.(py|pyi)$'
+
+      - id: python-ruff-check
+        name: uv run ruff check .
+        entry: bash -lc 'cd python && uv run ruff check .'
+        language: system
+        pass_filenames: false
+        files: '^python/.+\.(py|pyi)$'
+
+      - id: python-ty-check
+        name: uv run ty check thrust
+        entry: bash -lc 'cd python && uv run ty check thrust'
+        language: system
+        pass_filenames: false
+        files: '^python/.+\.(py|pyi)$'
+
+      - id: thrust-wasm-clippy
+        name: cargo clippy -p thrust-wasm --all-targets -- -D warnings
+        entry: cargo clippy -p thrust-wasm --all-targets -- -D warnings
+        language: system
+        pass_filenames: false
+        require_serial: true
+        files: '^(crates/thrust-wasm/.+\.rs|Cargo\.toml|Cargo\.lock)$'
+
+      - id: thrust-wasm-ts-lint
+        name: npm run lint (thrust-wasm tests-ts)
+        entry: bash -lc 'cd crates/thrust-wasm/tests-ts && npm run lint'
+        language: system
+        pass_filenames: false
+        files: '^crates/thrust-wasm/tests-ts/.+\.(ts|tsx|js|jsx)$'
+
+      - id: thrust-wasm-ts-typecheck
+        name: npm run typecheck (thrust-wasm tests-ts)
+        entry: bash -lc 'cd crates/thrust-wasm/tests-ts && npm run typecheck'
+        language: system
+        pass_filenames: false
+        files: '^crates/thrust-wasm/tests-ts/.+\.(ts|tsx|js|jsx)$'
