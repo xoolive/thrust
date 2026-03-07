@@ -37,7 +37,7 @@ rest = ["dep:warp", "dep:tokio", "dep:tracing-subscriber"]
 
 [dev-dependencies]
 dotenvy = "0.15.7"
-jiff = "0.2.22"
+jiff = "0.2.23"
 
 [[example]]
 name = "airport_heliport"
