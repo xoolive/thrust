@@ -1,3 +1,4 @@
+use crate::error::ThrustError;
 use chrono::{Datelike, Duration, NaiveDate};
 
 const AIRAC_EPOCH: (i32, u32, u32) = (1998, 1, 29);
@@ -11,37 +12,47 @@ pub fn airac_code_from_date(date: NaiveDate) -> String {
     format!("{:02}{:02}", effective.year() % 100, ordinal)
 }
 
-pub fn airac_year_epoch(year: i32) -> Result<NaiveDate, Box<dyn std::error::Error>> {
-    let beg = NaiveDate::from_ymd_opt(year, 1, 1).ok_or("Invalid year")?;
+pub fn airac_year_epoch(year: i32) -> Result<NaiveDate, ThrustError> {
+    let beg = NaiveDate::from_ymd_opt(year, 1, 1).ok_or_else(|| ThrustError::ParseError("Invalid year".to_string()))?;
     let extra_days = (beg - airac_epoch()).num_days().rem_euclid(28);
     Ok(beg - Duration::days(extra_days - 28))
 }
 
-pub fn effective_date_from_airac_code(airac_code: &str) -> Result<NaiveDate, Box<dyn std::error::Error>> {
+pub fn effective_date_from_airac_code(airac_code: &str) -> Result<NaiveDate, ThrustError> {
     let (year, cycle) = parse_airac_code(airac_code)?;
     let year_epoch = airac_year_epoch(year)?;
     let effective = year_epoch + Duration::days((cycle as i64 - 1) * 28);
 
     if airac_code_from_date(effective) != airac_code {
-        return Err(format!("AIRAC mismatch for calculated start date: {effective}").into());
+        return Err(ThrustError::ParseError(format!(
+            "AIRAC mismatch for calculated start date: {effective}"
+        )));
     }
     Ok(effective)
 }
 
-pub fn airac_interval(airac_code: &str) -> Result<(NaiveDate, NaiveDate), Box<dyn std::error::Error>> {
+pub fn airac_interval(airac_code: &str) -> Result<(NaiveDate, NaiveDate), ThrustError> {
     let begin = effective_date_from_airac_code(airac_code)?;
     Ok((begin, begin + Duration::days(28)))
 }
 
-fn parse_airac_code(airac_code: &str) -> Result<(i32, u32), Box<dyn std::error::Error>> {
+fn parse_airac_code(airac_code: &str) -> Result<(i32, u32), ThrustError> {
     if airac_code.len() != 4 || !airac_code.chars().all(|c| c.is_ascii_digit()) {
-        return Err("AIRAC code must be in YYCC format, e.g. 2508".into());
+        return Err(ThrustError::ParseError(
+            "AIRAC code must be in YYCC format, e.g. 2508".to_string(),
+        ));
     }
 
-    let yy = airac_code[0..2].parse::<i32>()?;
-    let cc = airac_code[2..4].parse::<u32>()?;
+    let yy = airac_code[0..2]
+        .parse::<i32>()
+        .map_err(|e| ThrustError::ParseError(e.to_string()))?;
+    let cc = airac_code[2..4]
+        .parse::<u32>()
+        .map_err(|e| ThrustError::ParseError(e.to_string()))?;
     if !(1..=14).contains(&cc) {
-        return Err("AIRAC cycle number must be between 01 and 14".into());
+        return Err(ThrustError::ParseError(
+            "AIRAC cycle number must be between 01 and 14".to_string(),
+        ));
     }
 
     Ok((2000 + yy, cc))

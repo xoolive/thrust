@@ -4,6 +4,36 @@ use std::fmt::Display;
 use std::iter::Sum;
 use std::ops::{Add, BitAnd, Sub};
 
+/// A closed interval [start, stop] with inclusive bounds.
+///
+/// Represents a continuous range of values from `start` to `stop`, where both endpoints are included.
+/// Useful for representing time windows, altitude bands, or coordinate ranges in flight planning.
+///
+/// # Generic Parameters
+/// - `T`: Any type implementing `Ord` and numeric operations (e.g., `i32`, `DateTime`, `f64`)
+///
+/// # Fields
+/// - `start`: Inclusive start of the interval
+/// - `stop`: Inclusive end of the interval
+///
+/// # Operations
+/// - **Union (`+`)**: Combine overlapping or adjacent intervals
+/// - **Difference (`-`)**: Subtract an interval (creates gaps)
+/// - **Intersection (`&`)**: Find overlapping regions
+///
+/// # Examples
+/// ```ignore
+/// use thrust::intervals::Interval;
+///
+/// let flight_level_1 = Interval { start: 250, stop: 350 };  // FL250–FL350
+/// let flight_level_2 = Interval { start: 350, stop: 450 };  // FL350–FL450
+///
+/// // Union: creates a single merged interval if adjacent
+/// let merged = &flight_level_1 + &flight_level_2;
+///
+/// // Difference: removes the intersection
+/// let remainder = flight_level_1 - Interval { start: 300, stop: 400 };
+/// ```
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Interval<T> {
     pub start: T,
@@ -19,6 +49,27 @@ where
     }
 }
 
+/// A collection of disjoint intervals (gaps allowed).
+///
+/// Represents a union of non-overlapping intervals, which can have gaps between them.
+/// This is the result of combining, intersecting, or subtracting intervals.
+/// The collection is typically kept in sorted order for efficient operations.
+///
+/// # Fields
+/// - `elts`: Vector of disjoint intervals in order
+///
+/// # Examples
+/// ```ignore
+/// use thrust::intervals::Interval;
+///
+/// // Two non-adjacent flight level bands (with gap)
+/// let band1 = Interval { start: 250, stop: 350 };
+/// let band2 = Interval { start: 450, stop: 550 };
+/// let collection = band1 + band2;  // Results in IntervalCollection with gap [350–450]
+///
+/// // Calculate total time covered
+/// let total = collection.total_duration();
+/// ```
 #[derive(Debug)]
 pub struct IntervalCollection<T> {
     pub elts: Vec<Interval<T>>,
