@@ -2,8 +2,8 @@
 //!
 
 pub mod data;
-pub mod intervals;
 pub mod error;
+pub mod intervals;
 
 #[cfg(feature = "polars")]
 pub mod kalman;

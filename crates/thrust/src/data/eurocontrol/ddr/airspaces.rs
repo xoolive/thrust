@@ -180,10 +180,7 @@ fn parse_sls_reader<R: BufRead>(
     Ok(layers)
 }
 
-fn parse_layers_from_dir<P: AsRef<Path>>(
-    dir: P,
-    prefix: &str,
-) -> Result<Vec<DdrSectorLayer>, ThrustError> {
+fn parse_layers_from_dir<P: AsRef<Path>>(dir: P, prefix: &str) -> Result<Vec<DdrSectorLayer>, ThrustError> {
     let dir = dir.as_ref();
     let are =
         find_file_with_prefix_suffix(dir, prefix, ".are").ok_or_else(|| format!("Unable to find {prefix}*.are"))?;
@@ -193,10 +190,7 @@ fn parse_layers_from_dir<P: AsRef<Path>>(
     parse_sls_file(sls, &polygons)
 }
 
-fn parse_layers_from_zip<P: AsRef<Path>>(
-    zip_path: P,
-    prefix: &str,
-) -> Result<Vec<DdrSectorLayer>, ThrustError> {
+fn parse_layers_from_zip<P: AsRef<Path>>(zip_path: P, prefix: &str) -> Result<Vec<DdrSectorLayer>, ThrustError> {
     let are_bytes = read_first_zip_entry_bytes(&zip_path, |entry_name| file_name_matches(entry_name, prefix, ".are"))?;
     let sls_bytes = read_first_zip_entry_bytes(&zip_path, |entry_name| file_name_matches(entry_name, prefix, ".sls"))?;
     let polygons = parse_are_bytes(&are_bytes)?;

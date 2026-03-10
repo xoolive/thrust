@@ -58,9 +58,27 @@ const resolver = new NasrResolver(new Uint8Array(nasrZip));
 const airports = await resolver.airports();
 console.log(`Found ${airports.length} airports`);
 
-// Get specific airport
-const kord = await resolver.airport("KORD");
-console.log(kord.name); // "Chicago O'Hare International"
+// Get LAX (Los Angeles International) airport
+const lax = await resolver.resolve_airport("KLAX");
+console.log(lax.name); // "Los Angeles International"
+console.log(lax.latitude, lax.longitude); // 33.9425, -118.4081
+
+// Get JFK (New York) airport
+const jfk = await resolver.resolve_airport("KJFK");
+console.log(jfk.name); // "John F Kennedy International"
+
+// Resolve a navaid - BAF (Barnes VOR/DME) in Georgia
+const baf = await resolver.resolve_navaid("BAF");
+console.log(baf.code); // "BAF"
+console.log(baf.point_type); // "VOR/DME"
+
+// Resolve a waypoint/fix
+const basye = await resolver.resolve_fix("BASYE");
+console.log(basye.code); // "BASYE"
+
+// Query an airway
+const j48 = await resolver.resolve_airway("J48");
+console.log(j48.name); // "J48"
 ```
 
 ### EUROCONTROL DDR Data
@@ -84,15 +102,26 @@ import init, { parse_field15 } from "@anomalyco/thrust-wasm";
 
 await init();
 
-const route = "N0490F360 ELCOB6B ELCOB UT300 SENLO UN502 JSY DCT LIZAD";
+// Real-world transatlantic route from Europe to North America
+const route = "N0490F360 ELCOB6B ELCOB UT300 SENLO UN502 JSY DCT LIZAD DCT MOPAT DCT LUNIG DCT MOMIN DCT PIKIL/M084F380 NATD HOIST/N0490F380 N756C ANATI/N0441F340 DCT MIVAX DCT OBTEK DCT XORLO ROCKT2";
 const elements = parse_field15(route);
 
 // Results in structured elements:
 // [
-//   { speed: { kts: 490 }, altitude: { FL: 360 } },
-//   { SID: "ELCOB6B" },
+//   { speed: { kts: 490 }, altitude: { FL: 360 } },       // Initial cruise
+//   { SID: "ELCOB6B" },                                     // Departure procedure at ELCOB
 //   { waypoint: "ELCOB" },
-//   { airway: "UT300" },
+//   { airway: "UT300" },                                    // Upper T-route
+//   { waypoint: "SENLO" },                                  // Entry to Nat Track
+//   { airway: "UN502" },                                    // Upper N-route
+//   { waypoint: "JSY" },
+//   { direct_routing: "DCT" },                              // Direct routing
+//   { waypoint: "LIZAD" },
+//   { altitude_change: { FL: 380 } },                       // Altitude change mid-route
+//   { nat_routing: "NATD" },                                // NAT designation
+//   { waypoint: "HOIST" },
+//   { speed_altitude: { kts: 490, FL: 380 } },              // Speed/altitude constraint
+//   { waypoint: "N756C" },
 //   // ... more elements
 // ]
 ```
