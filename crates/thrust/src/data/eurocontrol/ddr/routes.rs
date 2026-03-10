@@ -1,3 +1,5 @@
+use crate::error::ThrustError;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
@@ -7,6 +9,34 @@ use std::path::{Path, PathBuf};
 use super::navpoints::{find_navpoints_file, parse_navpoints_bytes, parse_navpoints_file, DdrNavPoint};
 use super::{file_name_matches, read_first_zip_entry_bytes};
 
+/// A sequential navigation point along an ATS route from DDR data.
+///
+/// Represents a single waypoint in a defined airway. Route points are ordered
+/// by sequence number and collectively define the lateral path of an ATS route.
+///
+/// # Fields
+/// - `route`: Route designator (e.g., "N100", "UN456")
+/// - `seq`: Sequence number in route (1, 2, 3, ...)
+/// - `navaid`: Navigation point identifier
+/// - `point_type`: Classification (e.g., "NAVAID", "WAYPOINT", "AIRPORT")
+/// - `latitude`: Optional point latitude in WGS84 decimal degrees
+/// - `longitude`: Optional point longitude in WGS84 decimal degrees
+///
+/// # Example
+/// ```ignore
+/// let point = DdrRoutePoint {
+///     route: "N100".to_string(),
+///     seq: 1,
+///     navaid: "APTIN".to_string(),
+///     point_type: "WAYPOINT".to_string(),
+///     latitude: Some(47.6213),
+///     longitude: Some(-122.3007),
+/// };
+/// ```
+///
+/// # Note
+/// Multiple [`DdrRoutePoint`]s with the same route designator should be
+/// sorted by `seq` to reconstruct the complete route path.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DdrRoutePoint {
     pub route: String,
@@ -25,7 +55,7 @@ pub fn find_routes_file<P: AsRef<Path>>(dir: P) -> Option<PathBuf> {
     })
 }
 
-pub fn parse_routes_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<DdrRoutePoint>, Box<dyn std::error::Error>> {
+pub fn parse_routes_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<DdrRoutePoint>, ThrustError> {
     let dir = dir.as_ref();
     let route_file = find_routes_file(dir).ok_or("No AIRAC_*.routes file found")?;
     let nav_file = find_navpoints_file(dir).ok_or("No AIRAC_*.nnpt file found")?;
@@ -33,7 +63,7 @@ pub fn parse_routes_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<DdrRoutePoint>, Bo
     parse_routes_file(route_file, &navpoints)
 }
 
-pub fn parse_routes_path<P: AsRef<Path>>(path: P) -> Result<Vec<DdrRoutePoint>, Box<dyn std::error::Error>> {
+pub fn parse_routes_path<P: AsRef<Path>>(path: P) -> Result<Vec<DdrRoutePoint>, ThrustError> {
     let path = path.as_ref();
     if path.is_dir() {
         return parse_routes_dir(path);
@@ -48,7 +78,7 @@ pub fn parse_routes_path<P: AsRef<Path>>(path: P) -> Result<Vec<DdrRoutePoint>, 
     Err("DDR routes path must be a folder or a zip archive".into())
 }
 
-pub fn parse_routes_zip<P: AsRef<Path>>(zip_path: P) -> Result<Vec<DdrRoutePoint>, Box<dyn std::error::Error>> {
+pub fn parse_routes_zip<P: AsRef<Path>>(zip_path: P) -> Result<Vec<DdrRoutePoint>, ThrustError> {
     let nav_bytes =
         read_first_zip_entry_bytes(&zip_path, |entry_name| file_name_matches(entry_name, "AIRAC_", ".nnpt"))?;
     let route_bytes = read_first_zip_entry_bytes(&zip_path, |entry_name| {
@@ -61,23 +91,17 @@ pub fn parse_routes_zip<P: AsRef<Path>>(zip_path: P) -> Result<Vec<DdrRoutePoint
 pub fn parse_routes_file<P: AsRef<Path>>(
     path: P,
     navpoints: &[DdrNavPoint],
-) -> Result<Vec<DdrRoutePoint>, Box<dyn std::error::Error>> {
+) -> Result<Vec<DdrRoutePoint>, ThrustError> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     parse_routes_reader(reader, navpoints)
 }
 
-pub(crate) fn parse_routes_bytes(
-    bytes: &[u8],
-    navpoints: &[DdrNavPoint],
-) -> Result<Vec<DdrRoutePoint>, Box<dyn std::error::Error>> {
+pub(crate) fn parse_routes_bytes(bytes: &[u8], navpoints: &[DdrNavPoint]) -> Result<Vec<DdrRoutePoint>, ThrustError> {
     parse_routes_reader(BufReader::new(Cursor::new(bytes)), navpoints)
 }
 
-fn parse_routes_reader<R: BufRead>(
-    reader: R,
-    navpoints: &[DdrNavPoint],
-) -> Result<Vec<DdrRoutePoint>, Box<dyn std::error::Error>> {
+fn parse_routes_reader<R: BufRead>(reader: R, navpoints: &[DdrNavPoint]) -> Result<Vec<DdrRoutePoint>, ThrustError> {
     let nav_index: HashMap<String, (f64, f64)> = navpoints
         .iter()
         .map(|p| (p.name.to_uppercase(), (p.latitude, p.longitude)))

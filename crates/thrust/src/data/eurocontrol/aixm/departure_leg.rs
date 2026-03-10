@@ -1,3 +1,4 @@
+use crate::error::ThrustError;
 use quick_xml::name::QName;
 use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,27 @@ use crate::data::eurocontrol::aixm::Node;
 
 use super::{find_node, read_text};
 
+/// A single segment of a Standard Instrument Departure (SID) procedure.
+///
+/// Connects two navigation points in a terminal departure procedure.
+/// Part of the SID that guides aircraft from the airport through the
+/// departure phase into the en route network.
+///
+/// # Fields
+/// - `identifier`: Unique identifier for this leg
+/// - `departure`: Associated SID identifier (e.g., "KSEA01")
+/// - `start`: Entry point (airport or initial waypoint)
+/// - `end`: Exit point to the next leg or navaid
+///
+/// # Example
+/// ```ignore
+/// let leg = DepartureLeg {
+///     identifier: "LEG001".to_string(),
+///     departure: Some("KSEA01".to_string()),
+///     start: PointReference::Airport("KSEA".to_string()),
+///     end: PointReference::DesignatedPoint("KENRY".to_string()),
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DepartureLeg {
     pub identifier: String,
@@ -20,9 +42,7 @@ pub struct DepartureLeg {
     pub end: PointReference,
 }
 
-pub fn parse_departure_leg_zip_file<P: AsRef<Path>>(
-    path: P,
-) -> Result<HashMap<String, DepartureLeg>, Box<dyn std::error::Error>> {
+pub fn parse_departure_leg_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, DepartureLeg>, ThrustError> {
     let file = File::open(path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut legs = HashMap::new();
@@ -42,9 +62,7 @@ pub fn parse_departure_leg_zip_file<P: AsRef<Path>>(
     Ok(legs)
 }
 
-fn parse_departure_leg<R: std::io::BufRead>(
-    reader: &mut Reader<R>,
-) -> Result<DepartureLeg, Box<dyn std::error::Error>> {
+fn parse_departure_leg<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<DepartureLeg, ThrustError> {
     let mut leg = DepartureLeg::default();
 
     while let Ok(node) = find_node(
@@ -82,7 +100,7 @@ fn parse_departure_leg<R: std::io::BufRead>(
 fn parse_terminal_segment_point<R: std::io::BufRead>(
     reader: &mut Reader<R>,
     end: QName,
-) -> Result<PointReference, Box<dyn std::error::Error>> {
+) -> Result<PointReference, ThrustError> {
     while let Ok(node) = find_node(reader, vec![QName(b"aixm:TerminalSegmentPoint")], Some(end)) {
         while let Ok(node) = find_node(
             reader,

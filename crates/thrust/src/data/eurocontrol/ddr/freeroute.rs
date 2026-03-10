@@ -1,3 +1,5 @@
+use crate::error::ThrustError;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
@@ -7,6 +9,29 @@ use std::path::Path;
 use super::airspaces::{find_file_with_prefix_suffix, parse_are_file, parse_sls_file, DdrSectorLayer};
 use super::navpoints::DdrNavPoint;
 
+/// A navigation point in a Free Route Airspace (FRA) zone.
+///
+/// Free Route Airspaces allow aircraft to navigate via any published point
+/// instead of following fixed airways. This type represents waypoints available
+/// within an FRA area.
+///
+/// # Fields
+/// - `fra`: Free Route Airspace identifier
+/// - `point_type`: Classification (e.g., "NAVAID", "WAYPOINT", "AIRPORT")
+/// - `name`: Point designator (e.g., "APTIN", "SEA")
+/// - `latitude`: Optional latitude in WGS84 decimal degrees
+/// - `longitude`: Optional longitude in WGS84 decimal degrees
+///
+/// # Example
+/// ```ignore
+/// let point = DdrFreeRoutePoint {
+///     fra: "FR_EUR".to_string(),
+///     point_type: "WAYPOINT".to_string(),
+///     name: "APTIN".to_string(),
+///     latitude: Some(47.6213),
+///     longitude: Some(-122.3007),
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DdrFreeRoutePoint {
     pub fra: String,
@@ -16,16 +41,32 @@ pub struct DdrFreeRoutePoint {
     pub longitude: Option<f64>,
 }
 
+/// Container for Free Route Airspace (FRA) data including boundaries and navigation points.
+///
+/// Free Route Airspaces allow flexible navigation within defined geographic areas.
+/// This structure combines the airspace boundary layers with the available
+/// navigation points for routing within the FRA.
+///
+/// # Fields
+/// - `areas`: Vertical sector layers defining the FRA boundaries and altitude limits
+/// - `points`: Navigation points available for use within the FRA
+///
+/// # Example
+/// ```ignore
+/// let fra_data = DdrFreeRouteData {
+///     areas: vec![/* sector layers */],
+///     points: vec![
+///         DdrFreeRoutePoint { fra: "FR_EUR".to_string(), ..Default::default() },
+///     ],
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DdrFreeRouteData {
     pub areas: Vec<DdrSectorLayer>,
     pub points: Vec<DdrFreeRoutePoint>,
 }
 
-pub fn parse_freeroute_dir<P: AsRef<Path>>(
-    dir: P,
-    navpoints: &[DdrNavPoint],
-) -> Result<DdrFreeRouteData, Box<dyn std::error::Error>> {
+pub fn parse_freeroute_dir<P: AsRef<Path>>(dir: P, navpoints: &[DdrNavPoint]) -> Result<DdrFreeRouteData, ThrustError> {
     let dir = dir.as_ref();
     let are = find_file_with_prefix_suffix(dir, "Free_Route_", ".are").ok_or("No Free_Route_*.are file")?;
     let sls = find_file_with_prefix_suffix(dir, "Free_Route_", ".sls").ok_or("No Free_Route_*.sls file")?;
@@ -41,7 +82,7 @@ pub fn parse_freeroute_dir<P: AsRef<Path>>(
 pub fn parse_frp_file<P: AsRef<Path>>(
     path: P,
     navpoints: &[DdrNavPoint],
-) -> Result<Vec<DdrFreeRoutePoint>, Box<dyn std::error::Error>> {
+) -> Result<Vec<DdrFreeRoutePoint>, ThrustError> {
     let nav_index: HashMap<String, (f64, f64)> = navpoints
         .iter()
         .map(|p| (p.name.to_uppercase(), (p.latitude, p.longitude)))

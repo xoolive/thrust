@@ -1,3 +1,4 @@
+use crate::error::ThrustError;
 use quick_xml::name::QName;
 use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
@@ -11,11 +12,28 @@ use crate::data::eurocontrol::aixm::Node;
 
 use super::{find_node, read_text};
 
-/**
- * A route segment as defined in AIXM. Segments only connect two points.
- *
- * The full route is formed by chaining multiple segments together.
- */
+/// A single segment of an ATS route connecting two sequential navigation points.
+///
+/// Route segments form the building blocks of complete airways. Each segment
+/// connects a start point and end point, with optional availability restrictions.
+/// Full routes are constructed by chaining multiple segments together in sequence.
+///
+/// # Fields
+/// - `identifier`: Unique database key
+/// - `route_formed`: The parent route designator this segment belongs to
+/// - `start`: Departure point (navaid, waypoint, or airport)
+/// - `end`: Arrival point (navaid, waypoint, or airport)
+///
+/// # Example
+/// ```ignore
+/// let segment = RouteSegment {
+///     identifier: "SEG001".to_string(),
+///     route_formed: Some("N100".to_string()),
+///     start: PointReference::Navaid("SEA".to_string()),
+///     end: PointReference::DesignatedPoint("APTIN".to_string()),
+///     ..Default::default()
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RouteSegment {
     #[serde(skip)]
@@ -32,10 +50,26 @@ pub struct RouteSegment {
     // pub direction: Option<String>,
 }
 
-/**
- * A reference to either a designated point or a navaid.
- * None is used when no point is found.
- */
+/// A reference to a navigation point (designated point, navaid, or airport).
+///
+/// Used in route segments, procedure legs, and airspace definitions to reference
+/// specific navigation points. The enum variants represent different point types
+/// that can appear in aviation procedures and routes.
+///
+/// # Variants
+/// - `DesignatedPoint(String)`: Published waypoint/fix identifier (e.g., "APTIN")
+/// - `Navaid(String)`: Navigation aid identifier (e.g., "SEA" for VOR)
+/// - `AirportHeliport(String)`: Airport or heliport identifier (e.g., "KSEA")
+/// - `None`: Point not resolved or undefined
+///
+/// # Example
+/// ```ignore
+/// let point = PointReference::DesignatedPoint("APTIN".to_string());
+/// match point {
+///     PointReference::DesignatedPoint(name) => println!("Waypoint: {}", name),
+///     _ => println!("Other point type"),
+/// }
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum PointReference {
     DesignatedPoint(String),
@@ -63,9 +97,7 @@ impl PointReference {
 /**
  * Parse route segment data from a ZIP file containing AIXM data.
  */
-pub fn parse_route_segment_zip_file<P: AsRef<Path>>(
-    path: P,
-) -> Result<HashMap<String, RouteSegment>, Box<dyn std::error::Error>> {
+pub fn parse_route_segment_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, RouteSegment>, ThrustError> {
     let file = File::open(path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut route_segments = HashMap::new();
@@ -85,9 +117,7 @@ pub fn parse_route_segment_zip_file<P: AsRef<Path>>(
     Ok(route_segments)
 }
 
-fn parse_route_segment<R: std::io::BufRead>(
-    reader: &mut Reader<R>,
-) -> Result<RouteSegment, Box<dyn std::error::Error>> {
+fn parse_route_segment<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<RouteSegment, ThrustError> {
     let mut segment = RouteSegment::default();
 
     while let Ok(node) = find_node(

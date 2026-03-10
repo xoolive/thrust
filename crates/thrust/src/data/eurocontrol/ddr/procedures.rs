@@ -1,7 +1,34 @@
+use crate::error::ThrustError;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
 
+/// A reference to an instrument procedure (SID or STAR) from DDR data.
+///
+/// Represents a Standard Instrument Departure (SID) or Standard Arrival Route (STAR)
+/// procedure with minimal data: airport, procedure name, and type.
+///
+/// # Fields
+/// - `airport`: Departure/arrival airport ICAO code (e.g., "KSEA")
+/// - `designator`: Published procedure name (e.g., "KSEA01", "ORCAS3")
+/// - `kind`: Procedure type ("SID" or "STAR")
+/// - `raw`: Raw procedure definition string (format varies by source)
+///
+/// # Example
+/// ```ignore
+/// let proc = DdrProcedureRef {
+///     airport: "KSEA".to_string(),
+///     designator: "KSEA01".to_string(),
+///     kind: "SID".to_string(),
+///     raw: "KSEA KSEA01 SID ...".to_string(),
+/// };
+/// ```
+///
+/// # Note
+/// For detailed procedure information (legs, waypoints, restrictions),
+/// use [`StandardInstrumentDeparture`](crate::data::eurocontrol::aixm::standard_instrument_departure::StandardInstrumentDeparture)
+/// or [`StandardInstrumentArrival`](crate::data::eurocontrol::aixm::standard_instrument_arrival::StandardInstrumentArrival) from AIXM data.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DdrProcedureRef {
     pub airport: String,
@@ -10,9 +37,7 @@ pub struct DdrProcedureRef {
     pub raw: String,
 }
 
-pub fn parse_sid_star_dir<P: AsRef<Path>>(
-    dir: P,
-) -> Result<(Vec<DdrProcedureRef>, Vec<DdrProcedureRef>), Box<dyn std::error::Error>> {
+pub fn parse_sid_star_dir<P: AsRef<Path>>(dir: P) -> Result<(Vec<DdrProcedureRef>, Vec<DdrProcedureRef>), ThrustError> {
     let mut sids = Vec::new();
     let mut stars = Vec::new();
 
@@ -31,10 +56,7 @@ pub fn parse_sid_star_dir<P: AsRef<Path>>(
     Ok((sids, stars))
 }
 
-pub fn parse_procedure_file<P: AsRef<Path>>(
-    path: P,
-    kind: &str,
-) -> Result<Vec<DdrProcedureRef>, Box<dyn std::error::Error>> {
+pub fn parse_procedure_file<P: AsRef<Path>>(path: P, kind: &str) -> Result<Vec<DdrProcedureRef>, ThrustError> {
     let text = std::fs::read_to_string(path)?;
     let mut rows = Vec::new();
 

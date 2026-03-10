@@ -11,6 +11,8 @@ use std::collections::HashMap;
 
 use quick_xml::{events::Event, name::QName, Reader};
 
+use crate::error::ThrustError;
+
 pub mod airport_heliport;
 pub mod airspace;
 pub mod arrival_leg;
@@ -31,7 +33,7 @@ fn find_node<'a, R: std::io::BufRead>(
     reader: &mut Reader<R>,
     lookup: Vec<QName<'a>>,
     end: Option<QName>,
-) -> Result<Node<'a>, Box<dyn std::error::Error>> {
+) -> Result<Node<'a>, ThrustError> {
     let mut buf = Vec::new();
     loop {
         match reader.read_event_into(&mut buf) {
@@ -73,23 +75,28 @@ fn find_node<'a, R: std::io::BufRead>(
                 }
             }
             Ok(Event::Eof) => break,
-            Err(e) => return Err(Box::new(e)),
+            Err(e) => return Err(ThrustError::from(e)),
             _ => (),
         }
         buf.clear();
     }
-    Err(Box::new(std::io::Error::other("Node not found")))
+    Err(ThrustError::ParseError("Node not found".to_string()))
 }
 
-fn read_text<R: std::io::BufRead>(reader: &mut Reader<R>, end: QName) -> Result<String, Box<dyn std::error::Error>> {
+fn read_text<R: std::io::BufRead>(reader: &mut Reader<R>, end: QName) -> Result<String, ThrustError> {
     let mut buf = Vec::new();
     let mut text = String::new();
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Text(e)) => text.push_str(&e.decode()?),
+            Ok(Event::Text(e)) => {
+                let decoded = e
+                    .decode()
+                    .map_err(|_| ThrustError::ParseError("Invalid XML encoding".to_string()))?;
+                text.push_str(&decoded);
+            }
             Ok(Event::End(e)) if e.name() == end => break,
             Ok(Event::Eof) => break,
-            Err(e) => return Err(Box::new(e)),
+            Err(e) => return Err(ThrustError::from(e)),
             _ => (),
         }
         buf.clear();
@@ -100,7 +107,7 @@ fn read_text<R: std::io::BufRead>(reader: &mut Reader<R>, end: QName) -> Result<
 pub fn read_attribute<R: std::io::BufRead>(
     reader: &mut Reader<R>,
     attr_name: QName,
-) -> Result<Option<String>, Box<dyn std::error::Error>> {
+) -> Result<Option<String>, ThrustError> {
     let mut buf = Vec::new();
     loop {
         match reader.read_event_into(&mut buf) {
@@ -113,7 +120,7 @@ pub fn read_attribute<R: std::io::BufRead>(
                 }
             }
             Ok(Event::Eof) => break,
-            Err(e) => return Err(Box::new(e)),
+            Err(e) => return Err(ThrustError::from(e)),
             _ => (),
         }
         buf.clear();
