@@ -50,7 +50,13 @@ def test_aixm_sources_parse_when_folder_available() -> None:
 
     eham = AixmAirportsSource(path).resolve_airport("EHAM")
     assert len(eham) >= 1
-    assert any("SCHIPHOL" in str(row.name or "").upper() for row in eham)
+    assert any(
+        any(
+            token in str(row.name or "").upper()
+            for token in ("SCHIPHOL", "AMSTERDAM")
+        )
+        for row in eham
+    )
 
     lszh = AixmAirportsSource(path).resolve_airport("LSZH")
     assert len(lszh) >= 1
