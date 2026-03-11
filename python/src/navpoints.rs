@@ -2,8 +2,7 @@ use pyo3::{exceptions::PyOSError, prelude::*, types::PyDict};
 use serde_json::Value;
 use std::fs::File;
 use std::path::PathBuf;
-use thrust::data::eurocontrol::aixm::designated_point::parse_designated_point_zip_file;
-use thrust::data::eurocontrol::aixm::navaid::parse_navaid_zip_file;
+use thrust::data::eurocontrol::aixm::dataset::parse_aixm_folder_path;
 use thrust::data::eurocontrol::ddr::navpoints::parse_navpoints_path;
 use thrust::data::faa::nasr::parse_field15_data_from_nasr_zip;
 
@@ -63,45 +62,24 @@ pub struct AixmNavpointsSource {
 impl AixmNavpointsSource {
     #[new]
     fn new(path: PathBuf) -> PyResult<Self> {
-        let root = path.as_path();
-        let designated = parse_designated_point_zip_file(root.join("DesignatedPoint.BASELINE.zip"))
-            .map_err(|e| PyOSError::new_err(e.to_string()))?;
-        let navaids =
-            parse_navaid_zip_file(root.join("Navaid.BASELINE.zip")).map_err(|e| PyOSError::new_err(e.to_string()))?;
-
-        let mut points: Vec<NavpointRecord> = designated
-            .into_values()
+        let points = parse_aixm_folder_path(path)
+            .map_err(|e| PyOSError::new_err(e.to_string()))?
+            .navaids
+            .into_iter()
             .map(|point| NavpointRecord {
-                code: point.designator.to_uppercase(),
-                kind: "fix".to_string(),
+                code: point.code,
+                kind: point.kind,
                 latitude: point.latitude,
                 longitude: point.longitude,
                 name: point.name,
                 identifier: Some(point.identifier),
-                point_type: Some(point.r#type),
-                description: None,
-                frequency: None,
-                region: None,
-                source: "eurocontrol_aixm".to_string(),
+                point_type: point.point_type,
+                description: point.description,
+                frequency: point.frequency,
+                region: point.region,
+                source: point.source,
             })
             .collect();
-
-        points.extend(navaids.into_values().filter_map(|navaid| {
-            let designator = navaid.name.clone()?;
-            Some(NavpointRecord {
-                code: designator.to_uppercase(),
-                kind: "navaid".to_string(),
-                latitude: navaid.latitude,
-                longitude: navaid.longitude,
-                name: navaid.name,
-                identifier: Some(navaid.identifier),
-                point_type: Some(navaid.r#type),
-                description: navaid.description,
-                frequency: None,
-                region: None,
-                source: "eurocontrol_aixm".to_string(),
-            })
-        }));
 
         Ok(Self { points })
     }

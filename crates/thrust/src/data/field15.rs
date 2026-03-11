@@ -52,6 +52,7 @@
 //! ```rust
 //! use thrust::data::field15::{Field15Element, Field15Parser};
 //!
+//! let line = "N0490F360 ELCOB6B ELCOB UT300 SENLO UN502 JSY DCT LIZAD";
 //! let elements: Vec<Field15Element> = Field15Parser::parse(&line);
 //! match serde_json::to_string(&elements) {
 //!     Ok(json) => println!("{}", json),

@@ -1,8 +1,8 @@
 [project]
 name = "traffic-thrust"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 readme = "readme.md"
-dependencies = ["pandas>=2.2.0"]
+dependencies = ["pandas>=3.0"]
 classifiers = [
   "Programming Language :: Rust",
   "Programming Language :: Python :: Implementation :: CPython",
@@ -47,7 +47,7 @@ lint.select = [
   "RUF",
 ]
 line-length = 80
-target-version = "py310"
+target-version = "py311"
 
 [tool.pytest.ini_options]
 addopts = "--log-level=INFO --color=yes"

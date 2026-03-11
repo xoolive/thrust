@@ -1,3 +1,4 @@
+use crate::error::ThrustError;
 use quick_xml::name::QName;
 use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
@@ -10,10 +11,28 @@ use crate::data::eurocontrol::aixm::Node;
 
 use super::{find_node, read_text};
 
-/**
- * A navaid as defined in AIXM.
- *
- */
+/// A radio navigation aid (VOR, NDB, DME, etc.) as defined in AIXM.
+///
+/// Represents ground-based radio navigation aids used for aircraft positioning
+/// and flight guidance. These are fixed transmitters with known locations.
+///
+/// # Fields
+/// - `identifier`: Unique database key
+/// - `latitude`/`longitude`: Location in WGS84 decimal degrees
+/// - `name`: Published identifier/designator (e.g., "SEA" for Seattle-Tacoma VOR)
+/// - `r#type`: Navaid classification (e.g., "VOR", "NDB", "DME", "TACAN")
+///
+/// # Example
+/// ```ignore
+/// let vor = Navaid {
+///     identifier: "SEA".to_string(),
+///     name: Some("SEATTLE-TACOMA".to_string()),
+///     latitude: 47.4502,
+///     longitude: -122.3088,
+///     r#type: "VOR".to_string(),
+///     ..Default::default()
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Navaid {
     #[serde(skip)]
@@ -32,7 +51,7 @@ pub struct Navaid {
     pub description: Option<String>,
 }
 
-pub fn parse_navaid_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Navaid>, Box<dyn std::error::Error>> {
+pub fn parse_navaid_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Navaid>, ThrustError> {
     let file = File::open(path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut navaids = HashMap::new();
@@ -52,7 +71,7 @@ pub fn parse_navaid_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, 
     Ok(navaids)
 }
 
-fn parse_navaid<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Navaid, Box<dyn std::error::Error>> {
+fn parse_navaid<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Navaid, ThrustError> {
     let mut navaid = Navaid::default();
 
     while let Ok(node) = find_node(

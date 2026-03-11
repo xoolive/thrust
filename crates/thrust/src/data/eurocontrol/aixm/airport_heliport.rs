@@ -7,12 +7,38 @@ use std::{collections::HashMap, fs::File};
 use zip::read::ZipArchive;
 
 use crate::data::eurocontrol::aixm::Node;
+use crate::error::ThrustError;
 
 use super::{find_node, read_text};
 
-/**
- * An airport or heliport as defined in AIXM.
- */
+/// An airport or heliport as defined in AIXM (Aeronautical Information Exchange Model).
+///
+/// This struct represents aviation facility data including geographic location,
+/// identification codes (IATA/ICAO), and elevation information loaded from
+/// EUROCONTROL AIXM baseline data files.
+///
+/// # Fields
+/// - `identifier`: Unique database identifier
+/// - `latitude`/`longitude`: Location in WGS84 decimal degrees
+/// - `altitude`: Field elevation in feet above mean sea level
+/// - `iata`: IATA code (e.g., "JFK"), if assigned
+/// - `icao`: ICAO code (e.g., "KJFK")
+/// - `name`: Official facility name
+/// - `city`: Serving city/municipality
+/// - `r#type`: Facility type (e.g., "Airport", "Heliport")
+///
+/// # Example
+/// ```ignore
+/// let airport = AirportHeliport {
+///     identifier: "JFK".to_string(),
+///     iata: Some("JFK".to_string()),
+///     icao: "KJFK".to_string(),
+///     latitude: 40.6413,
+///     longitude: -73.7781,
+///     altitude: 13.0,
+///     ..Default::default()
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AirportHeliport {
     /// Unique identifier
@@ -39,7 +65,7 @@ pub struct AirportHeliport {
 /// Parse airport/heliport data from a ZIP file containing AIXM data.
 pub fn parse_airport_heliport_zip_file<P: AsRef<Path>>(
     path: P,
-) -> Result<HashMap<String, AirportHeliport>, Box<dyn std::error::Error>> {
+) -> Result<HashMap<String, AirportHeliport>, ThrustError> {
     let file = File::open(path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut airports = HashMap::new();
@@ -57,9 +83,7 @@ pub fn parse_airport_heliport_zip_file<P: AsRef<Path>>(
     Ok(airports)
 }
 
-fn parse_airport_heliport<R: std::io::BufRead>(
-    reader: &mut Reader<R>,
-) -> Result<AirportHeliport, Box<dyn std::error::Error>> {
+fn parse_airport_heliport<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<AirportHeliport, ThrustError> {
     let mut airport = AirportHeliport::default();
 
     while let Ok(node) = find_node(

@@ -1,3 +1,4 @@
+use crate::error::ThrustError;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -6,6 +7,16 @@ use crate::data::faa::nasr::NasrPoint;
 #[cfg(feature = "net")]
 const FAA_NAT_URL: &str = "https://notams.aim.faa.gov/nat.html";
 
+/// Direction of flight level assignments for a North Atlantic Track.
+///
+/// North Atlantic Organized Track System (NAT) routes assign different flight levels
+/// for eastbound and westbound traffic to minimize conflicts while optimizing fuel efficiency.
+///
+/// # Variants
+/// - `East`: Track is valid only for eastbound flights (typically 0°-180°)
+/// - `West`: Track is valid only for westbound flights (typically 180°-360°)
+/// - `Both`: Track is valid for both directions (rare; used during special operations)
+/// - `Unknown`: Direction could not be determined from available data
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum NatDirection {
     East,
@@ -14,6 +25,17 @@ pub enum NatDirection {
     Unknown,
 }
 
+/// A waypoint or fix on a North Atlantic Track.
+///
+/// This represents a single point in a NAT route. Points may be defined either by:
+/// - **Named fix**: A published navaid or waypoint (e.g., "WEST", "STIRA") with optional coordinates
+/// - **Coordinate**: A latitude/longitude pair in shorthand notation (e.g., "50/50" for 50°N 50°W)
+///
+/// # Fields
+/// - `token`: Raw identifier as parsed from the NAT bulletin (e.g., "STIRA", "50/50")
+/// - `name`: Human-readable name (e.g., "STANDARD INSTRUMENT REPAIR AREA"); None for coordinates
+/// - `latitude`: Decimal latitude if available; None if unresolved
+/// - `longitude`: Decimal longitude if available; None if unresolved
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NatPoint {
     pub token: String,
@@ -22,6 +44,20 @@ pub struct NatPoint {
     pub longitude: Option<f64>,
 }
 
+/// A single North Atlantic Track with routing, altitude assignments, and metadata.
+///
+/// NAT tracks are published daily and define high-altitude oceanic air routes between North America
+/// and Europe. Each track specifies a sequence of waypoints and approved flight levels for eastbound
+/// and/or westbound traffic. Tracks are identified by single letters (A–Z).
+///
+/// # Fields
+/// - `track_id`: Single-letter identifier (e.g., "A", "B")
+/// - `route_points`: Ordered sequence of waypoints defining the track path
+/// - `east_levels`: Approved flight levels for eastbound traffic (FL250–FL510)
+/// - `west_levels`: Approved flight levels for westbound traffic (FL250–FL510)
+/// - `nar_routes`: Alternate North American region routes or special routing
+/// - `validity`: Time window during which track is active (e.g., "0000 TO 0600Z")
+/// - `source_center`: Originating ATC center (e.g., "SHANNON", "GANDER")
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NatTrack {
     pub track_id: String,
@@ -44,6 +80,23 @@ impl NatTrack {
     }
 }
 
+/// A complete set of North Atlantic Tracks for a given validity period.
+///
+/// This represents the entire NAT bulletin published by the FAA, containing all active tracks
+/// for a specific time window. The bulletin includes metadata about when it was published and
+/// any traffic management initiatives (TMI) in effect.
+///
+/// # Fields
+/// - `tracks`: Collection of all active tracks (typically 6–8 tracks labeled A–G or H)
+/// - `tmi`: Traffic management initiative identifier if active (e.g., "TMI00001")
+/// - `updated_at`: Timestamp when the bulletin was last updated
+///
+/// # Example
+/// ```ignore
+/// let bulletin = parse_nat_bulletin(raw_html);
+/// println!("Active tracks: {:?}", bulletin.tracks.iter().map(|t| &t.track_id).collect::<Vec<_>>());
+/// println!("Valid from: {}", bulletin.updated_at.unwrap_or_default());
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NatBulletin {
     pub tracks: Vec<NatTrack>,
@@ -51,7 +104,7 @@ pub struct NatBulletin {
     pub updated_at: Option<String>,
 }
 
-pub fn fetch_nat_bulletin() -> Result<NatBulletin, Box<dyn std::error::Error>> {
+pub fn fetch_nat_bulletin() -> Result<NatBulletin, ThrustError> {
     #[cfg(not(feature = "net"))]
     {
         Err("FAA NAT network fetch is disabled; enable feature 'net'".into())

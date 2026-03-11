@@ -1,3 +1,4 @@
+use crate::error::ThrustError;
 use quick_xml::name::QName;
 use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
@@ -11,11 +12,27 @@ use crate::data::eurocontrol::aixm::Node;
 
 use super::{find_node, read_text};
 
-/**
- * A designated point as defined in AIXM.
- *
- * These are waypoints that are not navaids.
- */
+/// A published waypoint or fix that is not a navigation aid (navaid).
+///
+/// Designated points are waypoints defined in airways and instrument procedures,
+/// used for navigation guidance and route definition. They include intersections,
+/// VOR/DME intersections, and other significant points.
+///
+/// # Fields
+/// - `identifier`: Unique database identifier
+/// - `latitude`/`longitude`: Location in WGS84 decimal degrees  
+/// - `designator`: 5-letter ICAO designator (e.g., "APTIN")
+///
+/// # Example
+/// ```ignore
+/// let point = DesignatedPoint {
+///     identifier: "DP001".to_string(),
+///     designator: "APTIN".to_string(),
+///     latitude: 47.6213,
+///     longitude: -122.3007,
+///     ..Default::default()
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DesignatedPoint {
     #[serde(skip)]
@@ -36,7 +53,7 @@ pub struct DesignatedPoint {
 
 pub fn parse_designated_point_zip_file<P: AsRef<Path>>(
     path: P,
-) -> Result<HashMap<String, DesignatedPoint>, Box<dyn std::error::Error>> {
+) -> Result<HashMap<String, DesignatedPoint>, ThrustError> {
     let file = File::open(path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut points = HashMap::new();
@@ -56,9 +73,7 @@ pub fn parse_designated_point_zip_file<P: AsRef<Path>>(
     Ok(points)
 }
 
-fn parse_designated_point<R: std::io::BufRead>(
-    reader: &mut Reader<R>,
-) -> Result<DesignatedPoint, Box<dyn std::error::Error>> {
+fn parse_designated_point<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<DesignatedPoint, ThrustError> {
     let mut point = DesignatedPoint::default();
 
     while let Ok(node) = find_node(

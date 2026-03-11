@@ -1,3 +1,4 @@
+use crate::error::ThrustError;
 use quick_xml::name::QName;
 use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,26 @@ use crate::data::eurocontrol::aixm::Node;
 
 use super::{find_node, read_text};
 
+/// A single segment of a Standard Arrival Route (STAR) procedure.
+///
+/// Connects two navigation points in a terminal arrival procedure.
+/// Part of the STAR that guides aircraft from the en route network to the airport.
+///
+/// # Fields
+/// - `identifier`: Unique identifier for this leg
+/// - `arrival`: Associated STAR identifier (e.g., "KSEA01")
+/// - `start`: Entry point (navaid, waypoint, or airport)
+/// - `end`: Exit point or subsequent waypoint
+///
+/// # Example
+/// ```ignore
+/// let leg = ArrivalLeg {
+///     identifier: "LEG001".to_string(),
+///     arrival: Some("KSEA01".to_string()),
+///     start: PointReference::Navaid("SEA".to_string()),
+///     end: PointReference::DesignatedPoint("APTIN".to_string()),
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ArrivalLeg {
     pub identifier: String,
@@ -20,9 +41,7 @@ pub struct ArrivalLeg {
     pub end: PointReference,
 }
 
-pub fn parse_arrival_leg_zip_file<P: AsRef<Path>>(
-    path: P,
-) -> Result<HashMap<String, ArrivalLeg>, Box<dyn std::error::Error>> {
+pub fn parse_arrival_leg_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, ArrivalLeg>, ThrustError> {
     let file = File::open(path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut legs = HashMap::new();
@@ -42,7 +61,7 @@ pub fn parse_arrival_leg_zip_file<P: AsRef<Path>>(
     Ok(legs)
 }
 
-fn parse_arrival_leg<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<ArrivalLeg, Box<dyn std::error::Error>> {
+fn parse_arrival_leg<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<ArrivalLeg, ThrustError> {
     let mut leg = ArrivalLeg::default();
 
     while let Ok(node) = find_node(
@@ -81,7 +100,7 @@ fn parse_arrival_leg<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Arri
 fn parse_terminal_segment_point<R: std::io::BufRead>(
     reader: &mut Reader<R>,
     end: QName,
-) -> Result<PointReference, Box<dyn std::error::Error>> {
+) -> Result<PointReference, ThrustError> {
     while let Ok(node) = find_node(reader, vec![QName(b"aixm:TerminalSegmentPoint")], Some(end)) {
         while let Ok(node) = find_node(
             reader,

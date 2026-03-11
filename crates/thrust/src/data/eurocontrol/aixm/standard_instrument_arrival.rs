@@ -1,3 +1,4 @@
+use crate::error::ThrustError;
 use quick_xml::name::QName;
 use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,32 @@ use crate::data::eurocontrol::aixm::Node;
 
 use super::{find_node, read_text};
 
+/// A Standard Arrival Route (STAR) instrument procedure.
+///
+/// A STAR is a published procedure that guides arriving aircraft from the
+/// en route structure to the terminal area or final approach fix. Each STAR
+/// consists of one or more arrival legs connecting navigation points.
+///
+/// # Fields
+/// - `identifier`: Unique database key
+/// - `designator`: Published procedure name (e.g., "KSEA01", "ORCAS3")
+/// - `airport_heliport`: Destination airport/heliport identifier
+/// - `instruction`: Operating procedure notes or restrictions
+/// - `connecting_points`: Sequence of waypoints and navaids defining the procedure
+///
+/// # Example
+/// ```ignore
+/// let star = StandardInstrumentArrival {
+///     identifier: "STAR001".to_string(),
+///     designator: "KSEA01".to_string(),
+///     airport_heliport: Some("KSEA".to_string()),
+///     connecting_points: vec![
+///         PointReference::Navaid("SEA".to_string()),
+///         PointReference::DesignatedPoint("APTIN".to_string()),
+///     ],
+///     ..Default::default()
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StandardInstrumentArrival {
     #[serde(skip)]
@@ -24,7 +51,7 @@ pub struct StandardInstrumentArrival {
 
 pub fn parse_standard_instrument_arrival_zip_file<P: AsRef<Path>>(
     path: P,
-) -> Result<HashMap<String, StandardInstrumentArrival>, Box<dyn std::error::Error>> {
+) -> Result<HashMap<String, StandardInstrumentArrival>, ThrustError> {
     let file = File::open(path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut arrivals = HashMap::new();
@@ -46,7 +73,7 @@ pub fn parse_standard_instrument_arrival_zip_file<P: AsRef<Path>>(
 
 fn parse_standard_instrument_arrival<R: std::io::BufRead>(
     reader: &mut Reader<R>,
-) -> Result<StandardInstrumentArrival, Box<dyn std::error::Error>> {
+) -> Result<StandardInstrumentArrival, ThrustError> {
     let mut arrival = StandardInstrumentArrival::default();
 
     while let Ok(node) = find_node(
@@ -95,7 +122,7 @@ fn parse_standard_instrument_arrival<R: std::io::BufRead>(
 fn parse_connecting_point<R: std::io::BufRead>(
     reader: &mut Reader<R>,
     end: QName,
-) -> Result<Option<PointReference>, Box<dyn std::error::Error>> {
+) -> Result<Option<PointReference>, ThrustError> {
     while let Ok(node) = find_node(reader, vec![QName(b"aixm:TerminalSegmentPoint")], Some(end)) {
         while let Ok(node) = find_node(
             reader,

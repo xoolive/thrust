@@ -1,3 +1,4 @@
+use crate::error::ThrustError;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
@@ -17,90 +18,172 @@ pub use crate::data::airac::{airac_code_from_date, effective_date_from_airac_cod
 
 const NASR_BASE_URL: &str = "https://nfdc.faa.gov/webContent/28DaySub";
 
+/// An AIRAC cycle representing a 28-day aeronautical information publication cycle.
+///
+/// AIRAC cycles are standardized worldwide and used to publish navigation data,
+/// airport information, and procedures.
+///
+/// # Fields
+/// * `code` - 4-character AIRAC code in format "YYCC" (e.g., "2508" for 2025 Cycle 08)
+/// * `effective_date` - The date when this cycle becomes effective
 #[derive(Debug, Clone)]
 pub struct AiracCycle {
     pub code: String,
     pub effective_date: chrono::NaiveDate,
 }
 
+/// Summary information about a single file in an NASR dataset.
+///
+/// NASR (National Airspace System Resource) data is distributed as CSV files
+/// within ZIP archives, one cycle per archive.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NasrFileSummary {
+    /// Filename within the archive
     pub name: String,
+    /// Uncompressed size in bytes
     pub size_bytes: u64,
+    /// Compressed size in bytes
     pub compressed_size_bytes: u64,
+    /// Number of lines in the CSV file (if detected)
     pub line_count: Option<u64>,
+    /// Number of header columns (if detected)
     pub header_columns: Option<usize>,
+    /// CSV delimiter character (if detected)
     pub delimiter: Option<String>,
 }
 
+/// Summary of all files in an NASR AIRAC cycle.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NasrCycleSummary {
+    /// AIRAC code (e.g., "2508")
     pub airac_code: String,
+    /// Effective date in YYYY-MM-DD format
     pub effective_date: String,
+    /// Local path to the downloaded NASR ZIP file
     pub zip_path: String,
+    /// List of files contained in the archive
     pub files: Vec<NasrFileSummary>,
 }
 
+/// A navigation point (waypoint, navaid, or fix) from FAA NASR data.
+///
+/// Points are referenced in routes, procedures, and airways.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NasrPoint {
+    /// Unique identifier (e.g., "ORF", "RDBOE")
     pub identifier: String,
+    /// Type of point: "NAVAID", "FIX", "AIRPORT", etc.
     pub kind: String,
+    /// Latitude in decimal degrees
     pub latitude: f64,
+    /// Longitude in decimal degrees
     pub longitude: f64,
+    /// Name or description of the point
     pub name: Option<String>,
+    /// Additional descriptive text
     pub description: Option<String>,
+    /// VHF frequency (for navaids) in MHz
     pub frequency: Option<f64>,
+    /// Sub-type classification
     pub point_type: Option<String>,
+    /// ICAO region code
     pub region: Option<String>,
 }
 
+/// A segment of an ATS route (airway).
+///
+/// Airways consist of multiple segments, each defined by a "from" and "to" point.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NasrAirwaySegment {
+    /// Full airway name (e.g., "J500")
     pub airway_name: String,
+    /// Airway identifier number
     pub airway_id: String,
+    /// Airway designation (letter prefix, e.g., "J")
     pub airway_designation: String,
+    /// Location code for this segment
     pub airway_location: Option<String>,
+    /// Starting point identifier
     pub from_point: String,
+    /// Ending point identifier
     pub to_point: String,
 }
 
+/// An airspace boundary from FAA NASR data.
+///
+/// Airspaces are used for traffic management, approach control, and separation.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NasrAirspace {
+    /// Designator (e.g., "ORF A", "CHO C")
     pub designator: String,
+    /// Name of the airspace
     pub name: Option<String>,
+    /// Type (e.g., "Class A", "Class C", "TRSA")
     pub type_: Option<String>,
+    /// Minimum altitude in feet (mean sea level)
     pub lower: Option<f64>,
+    /// Maximum altitude in feet (mean sea level)
     pub upper: Option<f64>,
+    /// Boundary polygon as (longitude, latitude) pairs
     pub coordinates: Vec<(f64, f64)>, // (lon, lat)
 }
 
+/// A leg (segment) of a SID or STAR procedure.
+///
+/// Procedures consist of multiple legs that guide aircraft along a defined path.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NasrProcedureLeg {
+    /// Type of procedure: "SID" or "STAR"
     pub procedure_kind: String,
+    /// Procedure identifier (e.g., "RCKT2")
     pub procedure_id: String,
+    /// Route portion classification
     pub route_portion_type: String,
+    /// Name of the route (optional)
     pub route_name: Option<String>,
+    /// Body sequence number for this leg
     pub body_seq: Option<i32>,
+    /// Sequence within the procedure
     pub point_seq: Option<i32>,
+    /// Waypoint identifier for this leg
     pub point: String,
+    /// Next waypoint (for multi-point procedures)
     pub next_point: Option<String>,
 }
 
+/// Complete Field15 navigation data for a single AIRAC cycle.
+///
+/// This is the result of parsing all navigation-related CSV files from NASR.
+/// It contains waypoints, airways, and procedures that can be used to resolve
+/// and enrich flight routes encoded in ICAO Field 15 format.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NasrField15Data {
+    /// All navigation points (waypoints, navaids, fixes)
     pub points: Vec<NasrPoint>,
+    /// All ATS route segments (airways)
     pub airways: Vec<NasrAirwaySegment>,
+    /// SID procedure identifiers
     pub sid_designators: Vec<String>,
+    /// STAR procedure identifiers
     pub star_designators: Vec<String>,
+    /// All legs for SID procedures
     pub sid_legs: Vec<NasrProcedureLeg>,
+    /// All legs for STAR procedures
     pub star_legs: Vec<NasrProcedureLeg>,
 }
 
+/// An index for quick lookup of Field15 elements by name.
+///
+/// This is used to speed up validation and enrichment of flight routes.
 #[derive(Debug, Clone, Default)]
 pub struct NasrField15Index {
+    /// Set of point identifiers and names (uppercase)
     pub point_names: HashSet<String>,
+    /// Set of airway names (uppercase)
     pub airway_names: HashSet<String>,
+    /// Set of SID identifiers (uppercase)
     pub sid_names: HashSet<String>,
+    /// Set of STAR identifiers (uppercase)
     pub star_names: HashSet<String>,
 }
 
@@ -139,7 +222,7 @@ impl NasrField15Index {
     }
 }
 
-pub fn cycle_from_airac_code(airac_code: &str) -> Result<AiracCycle, Box<dyn std::error::Error>> {
+pub fn cycle_from_airac_code(airac_code: &str) -> Result<AiracCycle, ThrustError> {
     let effective_date = effective_date_from_airac_code(airac_code)?;
     Ok(AiracCycle {
         code: airac_code.to_string(),
@@ -147,7 +230,7 @@ pub fn cycle_from_airac_code(airac_code: &str) -> Result<AiracCycle, Box<dyn std
     })
 }
 
-pub fn nasr_zip_url_from_airac_code(airac_code: &str) -> Result<String, Box<dyn std::error::Error>> {
+pub fn nasr_zip_url_from_airac_code(airac_code: &str) -> Result<String, ThrustError> {
     let cycle = cycle_from_airac_code(airac_code)?;
     Ok(format!(
         "{NASR_BASE_URL}/28DaySubscription_Effective_{}.zip",
@@ -155,10 +238,7 @@ pub fn nasr_zip_url_from_airac_code(airac_code: &str) -> Result<String, Box<dyn 
     ))
 }
 
-pub fn download_nasr_zip_for_airac<P: AsRef<Path>>(
-    airac_code: &str,
-    output_dir: P,
-) -> Result<PathBuf, Box<dyn std::error::Error>> {
+pub fn download_nasr_zip_for_airac<P: AsRef<Path>>(airac_code: &str, output_dir: P) -> Result<PathBuf, ThrustError> {
     #[cfg(target_arch = "wasm32")]
     {
         let _ = (airac_code, output_dir);
@@ -196,7 +276,7 @@ pub fn download_nasr_zip_for_airac<P: AsRef<Path>>(
     }
 }
 
-pub fn parse_nasr_zip_file<P: AsRef<Path>>(path: P) -> Result<Vec<NasrFileSummary>, Box<dyn std::error::Error>> {
+pub fn parse_nasr_zip_file<P: AsRef<Path>>(path: P) -> Result<Vec<NasrFileSummary>, ThrustError> {
     let file = File::open(path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut summaries = Vec::new();
@@ -237,7 +317,7 @@ pub fn parse_nasr_zip_file<P: AsRef<Path>>(path: P) -> Result<Vec<NasrFileSummar
 pub fn load_nasr_cycle_summary<P: AsRef<Path>>(
     airac_code: &str,
     output_dir: P,
-) -> Result<NasrCycleSummary, Box<dyn std::error::Error>> {
+) -> Result<NasrCycleSummary, ThrustError> {
     let cycle = cycle_from_airac_code(airac_code)?;
     let zip_path = download_nasr_zip_for_airac(airac_code, output_dir)?;
     let files = parse_nasr_zip_file(&zip_path)?;
@@ -250,19 +330,17 @@ pub fn load_nasr_cycle_summary<P: AsRef<Path>>(
     })
 }
 
-pub fn parse_field15_data_from_nasr_zip<P: AsRef<Path>>(
-    path: P,
-) -> Result<NasrField15Data, Box<dyn std::error::Error>> {
+pub fn parse_field15_data_from_nasr_zip<P: AsRef<Path>>(path: P) -> Result<NasrField15Data, ThrustError> {
     let mut csv_zip = open_csv_bundle(path)?;
     parse_field15_data_from_csv_bundle(&mut csv_zip)
 }
 
-pub fn parse_field15_data_from_nasr_bytes(bytes: &[u8]) -> Result<NasrField15Data, Box<dyn std::error::Error>> {
+pub fn parse_field15_data_from_nasr_bytes(bytes: &[u8]) -> Result<NasrField15Data, ThrustError> {
     let mut csv_zip = open_csv_bundle_from_bytes(bytes)?;
     parse_field15_data_from_csv_bundle(&mut csv_zip)
 }
 
-pub fn parse_airspaces_from_nasr_bytes(bytes: &[u8]) -> Result<Vec<NasrAirspace>, Box<dyn std::error::Error>> {
+pub fn parse_airspaces_from_nasr_bytes(bytes: &[u8]) -> Result<Vec<NasrAirspace>, ThrustError> {
     let mut outer = ZipArchive::new(Cursor::new(bytes.to_vec()))?;
     let mut saa_bytes = Vec::new();
 
@@ -293,9 +371,210 @@ pub fn parse_airspaces_from_nasr_bytes(bytes: &[u8]) -> Result<Vec<NasrAirspace>
     Ok(all)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NasrAirportRecord {
+    pub code: String,
+    pub iata: Option<String>,
+    pub icao: Option<String>,
+    pub name: Option<String>,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub region: Option<String>,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NasrNavpointRecord {
+    pub code: String,
+    pub identifier: String,
+    pub kind: String,
+    pub name: Option<String>,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub description: Option<String>,
+    pub frequency: Option<f64>,
+    pub point_type: Option<String>,
+    pub region: Option<String>,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NasrAirwayPointRecord {
+    pub code: String,
+    pub raw_code: String,
+    pub kind: String,
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NasrAirwayRecord {
+    pub name: String,
+    pub source: String,
+    pub route_class: Option<String>,
+    pub points: Vec<NasrAirwayPointRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NasrResolverData {
+    pub airports: Vec<NasrAirportRecord>,
+    pub navaids: Vec<NasrNavpointRecord>,
+    pub airways: Vec<NasrAirwayRecord>,
+    pub airspaces: Vec<NasrAirspace>,
+}
+
+pub fn parse_resolver_data_from_nasr_bytes(bytes: &[u8]) -> Result<NasrResolverData, ThrustError> {
+    let data = parse_field15_data_from_nasr_bytes(bytes)?;
+    let nasr_airspaces = parse_airspaces_from_nasr_bytes(bytes)?;
+
+    let points = data.points;
+    let airway_segments = data.airways;
+
+    let airports: Vec<NasrAirportRecord> = points
+        .iter()
+        .filter(|p| p.kind == "AIRPORT")
+        .map(|p| {
+            let code = p.identifier.to_uppercase();
+            let iata = if code.len() == 3 { Some(code.clone()) } else { None };
+            let icao = if code.len() == 4 { Some(code.clone()) } else { None };
+
+            NasrAirportRecord {
+                code,
+                iata,
+                icao,
+                name: p.name.clone(),
+                latitude: p.latitude,
+                longitude: p.longitude,
+                region: p.region.clone(),
+                source: "faa_nasr".to_string(),
+            }
+        })
+        .collect();
+
+    let fixes: Vec<NasrNavpointRecord> = points
+        .iter()
+        .filter(|p| p.kind == "FIX")
+        .map(|p| NasrNavpointRecord {
+            code: normalize_point_code(&p.identifier),
+            identifier: p.identifier.to_uppercase(),
+            kind: "fix".to_string(),
+            name: p.name.clone(),
+            latitude: p.latitude,
+            longitude: p.longitude,
+            description: p.description.clone(),
+            frequency: p.frequency,
+            point_type: p.point_type.clone(),
+            region: p.region.clone(),
+            source: "faa_nasr".to_string(),
+        })
+        .collect();
+
+    let mut navaids: Vec<NasrNavpointRecord> = points
+        .iter()
+        .filter(|p| p.kind == "NAVAID")
+        .map(|p| NasrNavpointRecord {
+            code: normalize_point_code(&p.identifier),
+            identifier: p.identifier.to_uppercase(),
+            kind: "navaid".to_string(),
+            name: p.name.clone(),
+            latitude: p.latitude,
+            longitude: p.longitude,
+            description: p.description.clone(),
+            frequency: p.frequency,
+            point_type: p.point_type.clone(),
+            region: p.region.clone(),
+            source: "faa_nasr".to_string(),
+        })
+        .collect();
+
+    navaids.extend(fixes.iter().cloned());
+    navaids.sort_by(|a, b| a.code.cmp(&b.code).then(a.point_type.cmp(&b.point_type)));
+    navaids.dedup_by(|a, b| {
+        a.code == b.code && a.point_type == b.point_type && a.latitude == b.latitude && a.longitude == b.longitude
+    });
+
+    let mut point_index: HashMap<String, NasrAirwayPointRecord> = HashMap::new();
+    for p in &points {
+        let normalized = normalize_point_code(&p.identifier);
+        let record = NasrAirwayPointRecord {
+            code: normalized.clone(),
+            raw_code: p.identifier.to_uppercase(),
+            kind: point_kind(&p.kind),
+            latitude: p.latitude,
+            longitude: p.longitude,
+        };
+        point_index.entry(p.identifier.to_uppercase()).or_insert(record.clone());
+        point_index.entry(normalized).or_insert(record);
+    }
+
+    let mut grouped: HashMap<String, Vec<NasrAirwayPointRecord>> = HashMap::new();
+    for seg in airway_segments {
+        let route_name = if seg.airway_id.trim().is_empty() {
+            seg.airway_name.clone()
+        } else {
+            seg.airway_id.clone()
+        };
+        let entry = grouped.entry(route_name).or_default();
+
+        let from_key = seg.from_point.to_uppercase();
+        let to_key = seg.to_point.to_uppercase();
+        let from = point_index.get(&from_key).cloned().unwrap_or(NasrAirwayPointRecord {
+            code: normalize_point_code(&from_key),
+            raw_code: from_key.clone(),
+            kind: "point".to_string(),
+            latitude: 0.0,
+            longitude: 0.0,
+        });
+        let to = point_index.get(&to_key).cloned().unwrap_or(NasrAirwayPointRecord {
+            code: normalize_point_code(&to_key),
+            raw_code: to_key.clone(),
+            kind: "point".to_string(),
+            latitude: 0.0,
+            longitude: 0.0,
+        });
+
+        if entry.last().map(|x| &x.code) != Some(&from.code) {
+            entry.push(from);
+        }
+        if entry.last().map(|x| &x.code) != Some(&to.code) {
+            entry.push(to);
+        }
+    }
+
+    let airways: Vec<NasrAirwayRecord> = grouped
+        .into_iter()
+        .map(|(name, points)| NasrAirwayRecord {
+            name,
+            source: "faa_nasr".to_string(),
+            route_class: None,
+            points,
+        })
+        .collect();
+
+    Ok(NasrResolverData {
+        airports,
+        navaids,
+        airways,
+        airspaces: nasr_airspaces,
+    })
+}
+
+fn normalize_point_code(value: &str) -> String {
+    value.split(':').next().unwrap_or(value).to_uppercase()
+}
+
+fn point_kind(kind: &str) -> String {
+    match kind {
+        "FIX" => "fix".to_string(),
+        "NAVAID" => "navaid".to_string(),
+        "AIRPORT" => "airport".to_string(),
+        _ => "point".to_string(),
+    }
+}
+
 fn parse_field15_data_from_csv_bundle(
     csv_zip: &mut ZipArchive<Cursor<Vec<u8>>>,
-) -> Result<NasrField15Data, Box<dyn std::error::Error>> {
+) -> Result<NasrField15Data, ThrustError> {
     let points = parse_points(csv_zip)?;
     let airways = parse_airways(csv_zip)?;
     let sid_designators = parse_designators(csv_zip, "DP_BASE.csv", &["DP_NAME", "DP_COMPUTER_CODE"])?;
@@ -313,7 +592,7 @@ fn parse_field15_data_from_csv_bundle(
     })
 }
 
-fn open_csv_bundle_from_bytes(bytes: &[u8]) -> Result<ZipArchive<Cursor<Vec<u8>>>, Box<dyn std::error::Error>> {
+fn open_csv_bundle_from_bytes(bytes: &[u8]) -> Result<ZipArchive<Cursor<Vec<u8>>>, ThrustError> {
     let mut outer = ZipArchive::new(Cursor::new(bytes.to_vec()))?;
 
     for i in 0..outer.len() {
@@ -329,7 +608,7 @@ fn open_csv_bundle_from_bytes(bytes: &[u8]) -> Result<ZipArchive<Cursor<Vec<u8>>
     Err("CSV bundle not found in NASR zip".into())
 }
 
-fn open_csv_bundle<P: AsRef<Path>>(path: P) -> Result<ZipArchive<Cursor<Vec<u8>>>, Box<dyn std::error::Error>> {
+fn open_csv_bundle<P: AsRef<Path>>(path: P) -> Result<ZipArchive<Cursor<Vec<u8>>>, ThrustError> {
     let file = File::open(path)?;
     let mut outer = ZipArchive::new(file)?;
 
@@ -447,7 +726,7 @@ fn parse_saa_xml_airspaces(xml: &[u8]) -> Vec<NasrAirspace> {
     out
 }
 
-fn parse_points(csv_zip: &mut ZipArchive<Cursor<Vec<u8>>>) -> Result<Vec<NasrPoint>, Box<dyn std::error::Error>> {
+fn parse_points(csv_zip: &mut ZipArchive<Cursor<Vec<u8>>>) -> Result<Vec<NasrPoint>, ThrustError> {
     let mut points = Vec::new();
 
     for row in read_csv_rows(csv_zip, "FIX_BASE.csv")? {
@@ -543,9 +822,7 @@ fn parse_points(csv_zip: &mut ZipArchive<Cursor<Vec<u8>>>) -> Result<Vec<NasrPoi
     Ok(points)
 }
 
-fn parse_airways(
-    csv_zip: &mut ZipArchive<Cursor<Vec<u8>>>,
-) -> Result<Vec<NasrAirwaySegment>, Box<dyn std::error::Error>> {
+fn parse_airways(csv_zip: &mut ZipArchive<Cursor<Vec<u8>>>) -> Result<Vec<NasrAirwaySegment>, ThrustError> {
     let mut segments = Vec::new();
 
     for row in read_csv_rows(csv_zip, "AWY_BASE.csv")? {
@@ -586,7 +863,7 @@ fn parse_designators(
     csv_zip: &mut ZipArchive<Cursor<Vec<u8>>>,
     filename: &str,
     fields: &[&str],
-) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+) -> Result<Vec<String>, ThrustError> {
     let mut set = HashSet::new();
     for row in read_csv_rows(csv_zip, filename)? {
         for field in fields {
@@ -644,7 +921,7 @@ fn parse_procedure_legs(
     csv_zip: &mut ZipArchive<Cursor<Vec<u8>>>,
     filename: &str,
     kind: &str,
-) -> Result<Vec<NasrProcedureLeg>, Box<dyn std::error::Error>> {
+) -> Result<Vec<NasrProcedureLeg>, ThrustError> {
     let rows = read_csv_rows(csv_zip, filename)?;
     let mut legs = rows
         .into_iter()
@@ -699,7 +976,7 @@ fn parse_procedure_legs(
 fn read_csv_rows(
     csv_zip: &mut ZipArchive<Cursor<Vec<u8>>>,
     filename: &str,
-) -> Result<Vec<HashMap<String, String>>, Box<dyn std::error::Error>> {
+) -> Result<Vec<HashMap<String, String>>, ThrustError> {
     let file = csv_zip.by_name(filename)?;
     let mut rdr = csv::ReaderBuilder::new().has_headers(true).from_reader(file);
     let mut rows = Vec::new();
@@ -755,7 +1032,7 @@ fn detect_delimiter(header: &str) -> Option<char> {
 
 type DelimitedContentInfo = (u64, Option<usize>, Option<char>);
 
-fn inspect_delimited_content<R: std::io::Read>(file: R) -> Result<DelimitedContentInfo, Box<dyn std::error::Error>> {
+fn inspect_delimited_content<R: std::io::Read>(file: R) -> Result<DelimitedContentInfo, ThrustError> {
     let mut reader = BufReader::new(file);
     let mut first_line_bytes = Vec::new();
     let mut line_count = 0u64;

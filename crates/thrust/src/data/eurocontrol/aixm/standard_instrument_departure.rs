@@ -1,3 +1,4 @@
+use crate::error::ThrustError;
 use quick_xml::name::QName;
 use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,32 @@ use crate::data::eurocontrol::aixm::Node;
 
 use super::{find_node, read_text};
 
+/// A Standard Instrument Departure (SID) procedure.
+///
+/// A SID is a published procedure that guides departing aircraft from the airport
+/// into the en route structure. Each SID consists of one or more departure legs
+/// connecting navigation points and defining the departure transition.
+///
+/// # Fields
+/// - `identifier`: Unique database key
+/// - `designator`: Published procedure name (e.g., "KSEA05", "RCKT2")
+/// - `airport_heliport`: Departure airport/heliport identifier
+/// - `instruction`: Operating procedure notes or restrictions
+/// - `connecting_points`: Sequence of waypoints and navaids defining the departure
+///
+/// # Example
+/// ```ignore
+/// let sid = StandardInstrumentDeparture {
+///     identifier: "SID001".to_string(),
+///     designator: "KSEA05".to_string(),
+///     airport_heliport: Some("KSEA".to_string()),
+///     connecting_points: vec![
+///         PointReference::Airport("KSEA".to_string()),
+///         PointReference::DesignatedPoint("KENRY".to_string()),
+///     ],
+///     ..Default::default()
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StandardInstrumentDeparture {
     #[serde(skip)]
@@ -24,7 +51,7 @@ pub struct StandardInstrumentDeparture {
 
 pub fn parse_standard_instrument_departure_zip_file<P: AsRef<Path>>(
     path: P,
-) -> Result<HashMap<String, StandardInstrumentDeparture>, Box<dyn std::error::Error>> {
+) -> Result<HashMap<String, StandardInstrumentDeparture>, ThrustError> {
     let file = File::open(path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut departures = HashMap::new();
@@ -46,7 +73,7 @@ pub fn parse_standard_instrument_departure_zip_file<P: AsRef<Path>>(
 
 fn parse_standard_instrument_departure<R: std::io::BufRead>(
     reader: &mut Reader<R>,
-) -> Result<StandardInstrumentDeparture, Box<dyn std::error::Error>> {
+) -> Result<StandardInstrumentDeparture, ThrustError> {
     let mut departure = StandardInstrumentDeparture::default();
 
     while let Ok(node) = find_node(
@@ -95,7 +122,7 @@ fn parse_standard_instrument_departure<R: std::io::BufRead>(
 fn parse_connecting_point<R: std::io::BufRead>(
     reader: &mut Reader<R>,
     end: QName,
-) -> Result<Option<PointReference>, Box<dyn std::error::Error>> {
+) -> Result<Option<PointReference>, ThrustError> {
     while let Ok(node) = find_node(reader, vec![QName(b"aixm:TerminalSegmentPoint")], Some(end)) {
         while let Ok(node) = find_node(
             reader,

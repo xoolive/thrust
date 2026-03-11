@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use wasm_bindgen::prelude::*;
 
-use thrust::data::faa::nasr::{parse_airspaces_from_nasr_bytes, parse_field15_data_from_nasr_bytes};
+use thrust::data::faa::nasr::parse_resolver_data_from_nasr_bytes;
 
 use crate::models::{
-    normalize_airway_name, normalize_point_code, point_kind, AirportRecord, AirspaceCompositeRecord,
-    AirspaceLayerRecord, AirspaceRecord, AirwayPointRecord, AirwayRecord, NavpointRecord,
+    normalize_airway_name, AirportRecord, AirspaceCompositeRecord, AirspaceLayerRecord, AirspaceRecord, AirwayRecord,
+    NavpointRecord,
 };
 
 fn compose_airspace(records: Vec<AirspaceRecord>) -> Option<AirspaceCompositeRecord> {
@@ -49,135 +49,12 @@ pub struct NasrResolver {
 impl NasrResolver {
     #[wasm_bindgen(constructor)]
     pub fn new(zip_bytes: &[u8]) -> Result<NasrResolver, JsValue> {
-        let data = parse_field15_data_from_nasr_bytes(zip_bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-        let nasr_airspaces =
-            parse_airspaces_from_nasr_bytes(zip_bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
-
-        let points = data.points;
-        let airway_segments = data.airways;
-
-        let airports: Vec<AirportRecord> = points
-            .iter()
-            .filter(|p| p.kind == "AIRPORT")
-            .map(|p| {
-                let code = p.identifier.to_uppercase();
-                let iata = if code.len() == 3 { Some(code.clone()) } else { None };
-                let icao = if code.len() == 4 { Some(code.clone()) } else { None };
-
-                AirportRecord {
-                    code,
-                    iata,
-                    icao,
-                    name: p.name.clone(),
-                    latitude: p.latitude,
-                    longitude: p.longitude,
-                    region: p.region.clone(),
-                    source: "faa_nasr".to_string(),
-                }
-            })
-            .collect();
-
-        let fixes: Vec<NavpointRecord> = points
-            .iter()
-            .filter(|p| p.kind == "FIX")
-            .map(|p| NavpointRecord {
-                code: normalize_point_code(&p.identifier),
-                identifier: p.identifier.to_uppercase(),
-                kind: "fix".to_string(),
-                name: p.name.clone(),
-                latitude: p.latitude,
-                longitude: p.longitude,
-                description: p.description.clone(),
-                frequency: p.frequency,
-                point_type: p.point_type.clone(),
-                region: p.region.clone(),
-                source: "faa_nasr".to_string(),
-            })
-            .collect();
-
-        let mut navaids: Vec<NavpointRecord> = points
-            .iter()
-            .filter(|p| p.kind == "NAVAID")
-            .map(|p| NavpointRecord {
-                code: normalize_point_code(&p.identifier),
-                identifier: p.identifier.to_uppercase(),
-                kind: "navaid".to_string(),
-                name: p.name.clone(),
-                latitude: p.latitude,
-                longitude: p.longitude,
-                description: p.description.clone(),
-                frequency: p.frequency,
-                point_type: p.point_type.clone(),
-                region: p.region.clone(),
-                source: "faa_nasr".to_string(),
-            })
-            .collect();
-
-        navaids.extend(fixes.iter().cloned());
-        navaids.sort_by(|a, b| a.code.cmp(&b.code).then(a.point_type.cmp(&b.point_type)));
-        navaids.dedup_by(|a, b| {
-            a.code == b.code && a.point_type == b.point_type && a.latitude == b.latitude && a.longitude == b.longitude
-        });
-
-        let mut point_index: HashMap<String, AirwayPointRecord> = HashMap::new();
-        for p in &points {
-            let normalized = normalize_point_code(&p.identifier);
-            let record = AirwayPointRecord {
-                code: normalized.clone(),
-                raw_code: p.identifier.to_uppercase(),
-                kind: point_kind(&p.kind),
-                latitude: p.latitude,
-                longitude: p.longitude,
-            };
-            point_index.entry(p.identifier.to_uppercase()).or_insert(record.clone());
-            point_index.entry(normalized).or_insert(record);
-        }
-
-        let mut grouped: HashMap<String, Vec<AirwayPointRecord>> = HashMap::new();
-        for seg in airway_segments {
-            let route_name = if seg.airway_id.trim().is_empty() {
-                seg.airway_name.clone()
-            } else {
-                seg.airway_id.clone()
-            };
-            let entry = grouped.entry(route_name).or_default();
-
-            let from_key = seg.from_point.to_uppercase();
-            let to_key = seg.to_point.to_uppercase();
-            let from = point_index.get(&from_key).cloned().unwrap_or(AirwayPointRecord {
-                code: normalize_point_code(&from_key),
-                raw_code: from_key.clone(),
-                kind: "point".to_string(),
-                latitude: 0.0,
-                longitude: 0.0,
-            });
-            let to = point_index.get(&to_key).cloned().unwrap_or(AirwayPointRecord {
-                code: normalize_point_code(&to_key),
-                raw_code: to_key.clone(),
-                kind: "point".to_string(),
-                latitude: 0.0,
-                longitude: 0.0,
-            });
-
-            if entry.last().map(|x| &x.code) != Some(&from.code) {
-                entry.push(from);
-            }
-            if entry.last().map(|x| &x.code) != Some(&to.code) {
-                entry.push(to);
-            }
-        }
-
-        let airways: Vec<AirwayRecord> = grouped
-            .into_iter()
-            .map(|(name, points)| AirwayRecord {
-                name,
-                source: "faa_nasr".to_string(),
-                route_class: None,
-                points,
-            })
-            .collect();
-
-        let airspaces: Vec<AirspaceRecord> = nasr_airspaces
+        let dataset = parse_resolver_data_from_nasr_bytes(zip_bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let airports: Vec<AirportRecord> = dataset.airports.into_iter().map(Into::into).collect();
+        let navaids: Vec<NavpointRecord> = dataset.navaids.into_iter().map(Into::into).collect();
+        let airways: Vec<AirwayRecord> = dataset.airways.into_iter().map(Into::into).collect();
+        let airspaces: Vec<AirspaceRecord> = dataset
+            .airspaces
             .into_iter()
             .map(|a| AirspaceRecord {
                 designator: a.designator,

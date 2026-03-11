@@ -1,3 +1,4 @@
+use crate::error::ThrustError;
 use quick_xml::name::QName;
 use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
@@ -11,20 +12,23 @@ use crate::data::eurocontrol::aixm::Node;
 
 use super::{find_node, read_text};
 
-/**
- * A route as defined in AIXM.
- *
- * A route name consists of a prefix (optional), a second letter, a number, and
- * a multiple identifier (optional).
- *
- * For example, "UN123" has:
- *   prefix: "U", second_letter: "N", number: "123", multiple_identifier: None
- *
- * Another example, "N456B" has:
- *   prefix: None, second_letter: "N", number: "456", multiple_identifier: "B"
- *
- */
-
+/// An Airway Traffic Service (ATS) route connecting navigation points.
+///
+/// ATS routes are established airways defined by a sequence of navigation points.
+/// The route name follows ICAO convention: `[prefix]second_letter number[multiple_identifier]`
+///
+/// # Examples of Route Designators
+/// - `"N100"` (North Atlantic tracks): prefix=None, second_letter="N", number="100", multiple_id=None
+/// - `"UN123"` (Upper routes): prefix="U", second_letter="N", number="123", multiple_id=None
+/// - `"N456B"` (Alternative routing): prefix=None, second_letter="N", number="456", multiple_id="B"
+/// - `"B216A"` (Jet route with alternative): prefix="B", second_letter="2", number="16", multiple_id="A"
+///
+/// # Fields
+/// - `identifier`: Unique database identifier
+/// - `prefix`: First letter (e.g., "U" for Upper, "L" for Lower), or None
+/// - `second_letter`: Route category designator (e.g., "N" for North Atlantic)
+/// - `number`: Numeric designator (1-999)
+/// - `multiple_identifier`: Optional letter for alternative routes
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Route {
     #[serde(skip)]
@@ -42,7 +46,7 @@ pub struct Route {
 /**
  * Parse route data from a ZIP file containing AIXM data.
  */
-pub fn parse_route_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Route>, Box<dyn std::error::Error>> {
+pub fn parse_route_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Route>, ThrustError> {
     let file = File::open(path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut routes = HashMap::new();
@@ -62,7 +66,7 @@ pub fn parse_route_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, R
     Ok(routes)
 }
 
-fn parse_route<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Route, Box<dyn std::error::Error>> {
+fn parse_route<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Route, ThrustError> {
     let mut route = Route::default();
 
     while let Ok(node) = find_node(

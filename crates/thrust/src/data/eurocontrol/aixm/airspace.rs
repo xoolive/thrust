@@ -1,3 +1,4 @@
+use crate::error::ThrustError;
 use quick_xml::name::QName;
 use quick_xml::Reader;
 use serde::{Deserialize, Serialize};
@@ -11,6 +12,19 @@ use crate::data::eurocontrol::aixm::Node;
 
 use super::{find_node, read_text};
 
+/// A vertically bounded portion of airspace with horizontal and vertical extents.
+///
+/// Represents a single altitude band within an airspace area. Each volume
+/// defines the limits (FL/MSL), boundary points, and references to component airspaces.
+///
+/// # Fields
+/// - `upper_limit`: Ceiling flight level or altitude (e.g., "28000")
+/// - `upper_limit_reference`: Reference datum for upper limit (e.g., "MSL", "GND")
+/// - `lower_limit`: Floor flight level or altitude (e.g., "5000")
+/// - `lower_limit_reference`: Reference datum for lower limit
+/// - `polygon`: Boundary vertices as (latitude, longitude) tuples in WGS84
+/// - `point_refs`: References to named waypoints defining the boundary
+/// - `component_airspace`: Reference to a sub-airspace (if applicable)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AirspaceVolume {
     pub upper_limit: Option<String>,
@@ -22,6 +36,29 @@ pub struct AirspaceVolume {
     pub component_airspace: Option<String>,
 }
 
+/// A named airspace area with vertical subdivisions and associated regulations.
+///
+/// Represents an airspace classification (Class A, B, C, etc.) or special-use area
+/// (Restricted Area, Prohibited Area, etc.) as defined in EUROCONTROL AIXM data.
+/// Each airspace may contain multiple vertically-stacked volumes.
+///
+/// # Fields
+/// - `identifier`: Unique database key
+/// - `designator`: Published callsign/designator (e.g., "UKICH", "TMA MOSCOW")
+/// - `type_`: Airspace classification (e.g., "Class D", "Restricted", "Danger Area")
+/// - `name`: Full descriptive name
+/// - `volumes`: One or more altitude bands defining the complete airspace
+///
+/// # Example
+/// ```ignore
+/// let airspace = Airspace {
+///     identifier: "UKICH".to_string(),
+///     designator: Some("UKICH".to_string()),
+///     type_: Some("Class D".to_string()),
+///     name: Some("Kyiv Terminal Area".to_string()),
+///     volumes: vec![/* altitude bands */],
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Airspace {
     #[serde(skip)]
@@ -32,9 +69,7 @@ pub struct Airspace {
     pub volumes: Vec<AirspaceVolume>,
 }
 
-pub fn parse_airspace_zip_file<P: AsRef<Path>>(
-    path: P,
-) -> Result<HashMap<String, Airspace>, Box<dyn std::error::Error>> {
+pub fn parse_airspace_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Airspace>, ThrustError> {
     let file = File::open(path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut airspaces = HashMap::new();
@@ -54,7 +89,7 @@ pub fn parse_airspace_zip_file<P: AsRef<Path>>(
     Ok(airspaces)
 }
 
-fn parse_airspace<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Airspace, Box<dyn std::error::Error>> {
+fn parse_airspace<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Airspace, ThrustError> {
     let mut airspace = Airspace::default();
 
     while let Ok(node) = find_node(
@@ -93,9 +128,7 @@ fn parse_airspace<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Airspac
     Ok(airspace)
 }
 
-fn parse_airspace_volume<R: std::io::BufRead>(
-    reader: &mut Reader<R>,
-) -> Result<AirspaceVolume, Box<dyn std::error::Error>> {
+fn parse_airspace_volume<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<AirspaceVolume, ThrustError> {
     let mut volume = AirspaceVolume::default();
 
     while let Ok(node) = find_node(

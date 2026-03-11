@@ -1,4 +1,7 @@
 use serde::Serialize;
+use thrust::data::eurocontrol::aixm::dataset as core;
+use thrust::data::faa::arcgis as core_arcgis;
+use thrust::data::faa::nasr as core_nasr;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct AirportRecord {
@@ -71,23 +74,192 @@ pub struct AirspaceCompositeRecord {
     pub source: String,
 }
 
+impl From<core::AirportRecord> for AirportRecord {
+    fn from(value: core::AirportRecord) -> Self {
+        Self {
+            code: value.code,
+            iata: value.iata,
+            icao: value.icao,
+            name: value.name,
+            latitude: value.latitude,
+            longitude: value.longitude,
+            region: value.region,
+            source: value.source,
+        }
+    }
+}
+
+impl From<core::NavpointRecord> for NavpointRecord {
+    fn from(value: core::NavpointRecord) -> Self {
+        Self {
+            code: value.code,
+            identifier: value.identifier,
+            kind: value.kind,
+            name: value.name,
+            latitude: value.latitude,
+            longitude: value.longitude,
+            description: value.description,
+            frequency: value.frequency,
+            point_type: value.point_type,
+            region: value.region,
+            source: value.source,
+        }
+    }
+}
+
+impl From<core::AirwayPointRecord> for AirwayPointRecord {
+    fn from(value: core::AirwayPointRecord) -> Self {
+        Self {
+            code: value.code,
+            raw_code: value.raw_code,
+            kind: value.kind,
+            latitude: value.latitude,
+            longitude: value.longitude,
+        }
+    }
+}
+
+impl From<core::AirwayRecord> for AirwayRecord {
+    fn from(value: core::AirwayRecord) -> Self {
+        Self {
+            name: value.name,
+            source: value.source,
+            route_class: value.route_class,
+            points: value.points.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<core_arcgis::ArcgisAirportRecord> for AirportRecord {
+    fn from(value: core_arcgis::ArcgisAirportRecord) -> Self {
+        Self {
+            code: value.code,
+            iata: value.iata,
+            icao: value.icao,
+            name: value.name,
+            latitude: value.latitude,
+            longitude: value.longitude,
+            region: value.region,
+            source: value.source,
+        }
+    }
+}
+
+impl From<core_arcgis::ArcgisNavpointRecord> for NavpointRecord {
+    fn from(value: core_arcgis::ArcgisNavpointRecord) -> Self {
+        Self {
+            code: value.code,
+            identifier: value.identifier,
+            kind: value.kind,
+            name: value.name,
+            latitude: value.latitude,
+            longitude: value.longitude,
+            description: value.description,
+            frequency: value.frequency,
+            point_type: value.point_type,
+            region: value.region,
+            source: value.source,
+        }
+    }
+}
+
+impl From<core_arcgis::ArcgisAirwayPointRecord> for AirwayPointRecord {
+    fn from(value: core_arcgis::ArcgisAirwayPointRecord) -> Self {
+        Self {
+            code: value.code,
+            raw_code: value.raw_code,
+            kind: value.kind,
+            latitude: value.latitude,
+            longitude: value.longitude,
+        }
+    }
+}
+
+impl From<core_arcgis::ArcgisAirwayRecord> for AirwayRecord {
+    fn from(value: core_arcgis::ArcgisAirwayRecord) -> Self {
+        Self {
+            name: value.name,
+            source: value.source,
+            route_class: value.route_class,
+            points: value.points.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<core_arcgis::ArcgisAirspaceRecord> for AirspaceRecord {
+    fn from(value: core_arcgis::ArcgisAirspaceRecord) -> Self {
+        Self {
+            designator: value.designator,
+            name: value.name,
+            type_: value.type_,
+            lower: value.lower,
+            upper: value.upper,
+            coordinates: value.coordinates,
+            source: value.source,
+        }
+    }
+}
+
+impl From<core_nasr::NasrAirportRecord> for AirportRecord {
+    fn from(value: core_nasr::NasrAirportRecord) -> Self {
+        Self {
+            code: value.code,
+            iata: value.iata,
+            icao: value.icao,
+            name: value.name,
+            latitude: value.latitude,
+            longitude: value.longitude,
+            region: value.region,
+            source: value.source,
+        }
+    }
+}
+
+impl From<core_nasr::NasrNavpointRecord> for NavpointRecord {
+    fn from(value: core_nasr::NasrNavpointRecord) -> Self {
+        Self {
+            code: value.code,
+            identifier: value.identifier,
+            kind: value.kind,
+            name: value.name,
+            latitude: value.latitude,
+            longitude: value.longitude,
+            description: value.description,
+            frequency: value.frequency,
+            point_type: value.point_type,
+            region: value.region,
+            source: value.source,
+        }
+    }
+}
+
+impl From<core_nasr::NasrAirwayPointRecord> for AirwayPointRecord {
+    fn from(value: core_nasr::NasrAirwayPointRecord) -> Self {
+        Self {
+            code: value.code,
+            raw_code: value.raw_code,
+            kind: value.kind,
+            latitude: value.latitude,
+            longitude: value.longitude,
+        }
+    }
+}
+
+impl From<core_nasr::NasrAirwayRecord> for AirwayRecord {
+    fn from(value: core_nasr::NasrAirwayRecord) -> Self {
+        Self {
+            name: value.name,
+            source: value.source,
+            route_class: value.route_class,
+            points: value.points.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
 pub(crate) fn normalize_airway_name(value: &str) -> String {
     value
         .chars()
         .filter(|c| c.is_ascii_alphanumeric())
         .collect::<String>()
         .to_uppercase()
-}
-
-pub(crate) fn normalize_point_code(value: &str) -> String {
-    value.split(':').next().unwrap_or(value).to_uppercase()
-}
-
-pub(crate) fn point_kind(kind: &str) -> String {
-    match kind {
-        "FIX" => "fix".to_string(),
-        "NAVAID" => "navaid".to_string(),
-        "AIRPORT" => "airport".to_string(),
-        _ => "point".to_string(),
-    }
 }

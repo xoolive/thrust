@@ -24,10 +24,27 @@ use crate::data::{
     },
     field15::{Altitude, Speed},
 };
+use crate::error::ThrustError;
 
-/**
- * An airway database containing navaids, designated points, route segments, and routes.
- */
+/// A compiled EUROCONTROL navigational database for querying routes and procedures.
+///
+/// This struct provides fast lookups of airports, navaids, designated points, routes, and
+/// instrument procedures (SIDs/STARs) loaded from AIXM data files. The database is typically
+/// loaded once and used to resolve route segments and procedure exit/entry points.
+///
+/// # Internals
+/// Data is stored in HashMaps keyed by identifier for efficient lookup.
+/// Private fields ensure data consistency and enable future optimizations.
+///
+/// # Example
+/// ```ignore
+/// use std::path::Path;
+/// use thrust::data::eurocontrol::database::AirwayDatabase;
+///
+/// let db = AirwayDatabase::new(Path::new("/path/to/eurocontrol/data"))?;
+/// let exit_points = db.resolve_sid_points("RCKT2");
+/// ```
+#[derive(Debug)]
 pub struct AirwayDatabase {
     airports: HashMap<String, AirportHeliport>,
     navaids: HashMap<String, Navaid>,
@@ -42,7 +59,7 @@ pub struct AirwayDatabase {
 
 impl AirwayDatabase {
     /// Load the airway database from the specified directory path.
-    pub fn new(path: &path::Path) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(path: &path::Path) -> Result<Self, ThrustError> {
         Ok(AirwayDatabase {
             airports: parse_airport_heliport_zip_file(path.join("AirportHeliport.BASELINE.zip"))?,
             navaids: parse_navaid_zip_file(path.join("Navaid.BASELINE.zip"))?,
@@ -379,19 +396,32 @@ const VALID_ROUTE_PREFIXES: [&str; 32] = [
 /// The WGS84 ellipsoid.
 static WGS84: Lazy<Ellipsoid> = Lazy::new(|| Ellipsoid::named("WGS84").unwrap());
 
-/**
- * A resolved route consisting of candidate route segments, based on their name.
- */
+/// A complete flight route decomposed into segments with geographic and altitude/speed constraints.
+///
+/// Represents a resolved or enriched route with waypoints and metadata about altitude and speed
+/// restrictions at each segment. Routes are typically populated by resolving field15 routes through
+/// the EUROCONTROL database.
+///
+/// # Fields
+/// - `segments`: Ordered list of route segments from origin to destination
+/// - `name`: Route identifier or description (e.g., "Q400 RCKT2 SOLEN")
 #[derive(Debug, Clone, Serialize)]
 pub struct ResolvedRoute {
     pub segments: Vec<ResolvedRouteSegment>,
     pub name: String,
 }
 
-/**
- * A resolved route segment consisting of start and end points.
- * Optionally, altitude and speed constraints can be included, propagated from modifiers.
- */
+/// A single segment of a resolved route between two waypoints.
+///
+/// Each segment connects two navigation points and may include altitude and speed constraints
+/// (e.g., "climb to FL350", "maintain 280 knots").
+///
+/// # Fields
+/// - `start`: Origin point of this segment (airport, navaid, designated point, or coordinates)
+/// - `end`: Destination point of this segment
+/// - `name`: Optional identifier for the segment (e.g., "Q400", route number)
+/// - `altitude`: Altitude constraint if specified in the procedure or route definition
+/// - `speed`: Speed constraint if specified in the procedure or route definition
 #[derive(Debug, Clone, Serialize)]
 pub struct ResolvedRouteSegment {
     pub start: ResolvedPoint,
@@ -404,9 +434,18 @@ pub struct ResolvedRouteSegment {
     pub speed: Option<Speed>,
 }
 
-/**
- * A resolved point (based on their name), which can be a navaid, designated point, coordinates, or None.
- */
+/// A resolved waypoint on a flight route, resolved to a specific geographic type.
+///
+/// Represents the result of looking up a point reference in the EUROCONTROL database.
+/// A point can be an airport, navaid, designated point, or a latitude/longitude coordinate.
+/// The `None` variant indicates the point could not be resolved.
+///
+/// # Variants
+/// - `AirportHeliport`: Arrival/departure airport or aerodrome
+/// - `Navaid`: Radio navigation aid (VOR, NDB, etc.)
+/// - `DesignatedPoint`: Published waypoint or fix
+/// - `Coordinates`: Raw latitude/longitude pair (typically for procedural segments)
+/// - `None`: Point reference could not be resolved to a known location
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum ResolvedPoint {
