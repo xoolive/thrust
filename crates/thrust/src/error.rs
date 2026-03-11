@@ -126,17 +126,9 @@ impl From<std::num::ParseFloatError> for ThrustError {
 }
 
 // For quick_xml attribute errors
-impl<'a> From<quick_xml::events::attributes::AttrError> for ThrustError {
+impl From<quick_xml::events::attributes::AttrError> for ThrustError {
     fn from(e: quick_xml::events::attributes::AttrError) -> Self {
         Self::XmlError(e.to_string())
-    }
-}
-
-// For quick_xml encoding errors
-#[cfg(feature = "encoding")]
-impl From<encoding_rs::EncodingError> for ThrustError {
-    fn from(_e: encoding_rs::EncodingError) -> Self {
-        Self::XmlError("Encoding error".to_string())
     }
 }
 

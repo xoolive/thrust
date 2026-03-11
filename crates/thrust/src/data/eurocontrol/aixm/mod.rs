@@ -16,6 +16,7 @@ use crate::error::ThrustError;
 pub mod airport_heliport;
 pub mod airspace;
 pub mod arrival_leg;
+pub mod dataset;
 pub mod departure_leg;
 pub mod designated_point;
 pub mod navaid;

@@ -40,6 +40,7 @@ use super::{file_name_matches, read_first_zip_entry_bytes};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DdrRoutePoint {
     pub route: String,
+    pub route_class: String,
     pub seq: i32,
     pub navaid: String,
     pub point_type: String,
@@ -97,7 +98,7 @@ pub fn parse_routes_file<P: AsRef<Path>>(
     parse_routes_reader(reader, navpoints)
 }
 
-pub(crate) fn parse_routes_bytes(bytes: &[u8], navpoints: &[DdrNavPoint]) -> Result<Vec<DdrRoutePoint>, ThrustError> {
+pub fn parse_routes_bytes(bytes: &[u8], navpoints: &[DdrNavPoint]) -> Result<Vec<DdrRoutePoint>, ThrustError> {
     parse_routes_reader(BufReader::new(Cursor::new(bytes)), navpoints)
 }
 
@@ -118,6 +119,7 @@ fn parse_routes_reader<R: BufRead>(reader: R, navpoints: &[DdrNavPoint]) -> Resu
             continue;
         }
         let route = fields[1].trim().to_string();
+        let route_class = fields[2].trim().to_string();
         let navaid = fields[5].trim().to_string();
         let point_type = fields[6].trim().to_string();
         let seq = fields[7].trim().parse::<i32>().unwrap_or(0);
@@ -125,6 +127,7 @@ fn parse_routes_reader<R: BufRead>(reader: R, navpoints: &[DdrNavPoint]) -> Resu
 
         result.push(DdrRoutePoint {
             route,
+            route_class,
             seq,
             navaid,
             point_type,

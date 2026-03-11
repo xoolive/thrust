@@ -371,6 +371,207 @@ pub fn parse_airspaces_from_nasr_bytes(bytes: &[u8]) -> Result<Vec<NasrAirspace>
     Ok(all)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NasrAirportRecord {
+    pub code: String,
+    pub iata: Option<String>,
+    pub icao: Option<String>,
+    pub name: Option<String>,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub region: Option<String>,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NasrNavpointRecord {
+    pub code: String,
+    pub identifier: String,
+    pub kind: String,
+    pub name: Option<String>,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub description: Option<String>,
+    pub frequency: Option<f64>,
+    pub point_type: Option<String>,
+    pub region: Option<String>,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NasrAirwayPointRecord {
+    pub code: String,
+    pub raw_code: String,
+    pub kind: String,
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NasrAirwayRecord {
+    pub name: String,
+    pub source: String,
+    pub route_class: Option<String>,
+    pub points: Vec<NasrAirwayPointRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NasrResolverData {
+    pub airports: Vec<NasrAirportRecord>,
+    pub navaids: Vec<NasrNavpointRecord>,
+    pub airways: Vec<NasrAirwayRecord>,
+    pub airspaces: Vec<NasrAirspace>,
+}
+
+pub fn parse_resolver_data_from_nasr_bytes(bytes: &[u8]) -> Result<NasrResolverData, ThrustError> {
+    let data = parse_field15_data_from_nasr_bytes(bytes)?;
+    let nasr_airspaces = parse_airspaces_from_nasr_bytes(bytes)?;
+
+    let points = data.points;
+    let airway_segments = data.airways;
+
+    let airports: Vec<NasrAirportRecord> = points
+        .iter()
+        .filter(|p| p.kind == "AIRPORT")
+        .map(|p| {
+            let code = p.identifier.to_uppercase();
+            let iata = if code.len() == 3 { Some(code.clone()) } else { None };
+            let icao = if code.len() == 4 { Some(code.clone()) } else { None };
+
+            NasrAirportRecord {
+                code,
+                iata,
+                icao,
+                name: p.name.clone(),
+                latitude: p.latitude,
+                longitude: p.longitude,
+                region: p.region.clone(),
+                source: "faa_nasr".to_string(),
+            }
+        })
+        .collect();
+
+    let fixes: Vec<NasrNavpointRecord> = points
+        .iter()
+        .filter(|p| p.kind == "FIX")
+        .map(|p| NasrNavpointRecord {
+            code: normalize_point_code(&p.identifier),
+            identifier: p.identifier.to_uppercase(),
+            kind: "fix".to_string(),
+            name: p.name.clone(),
+            latitude: p.latitude,
+            longitude: p.longitude,
+            description: p.description.clone(),
+            frequency: p.frequency,
+            point_type: p.point_type.clone(),
+            region: p.region.clone(),
+            source: "faa_nasr".to_string(),
+        })
+        .collect();
+
+    let mut navaids: Vec<NasrNavpointRecord> = points
+        .iter()
+        .filter(|p| p.kind == "NAVAID")
+        .map(|p| NasrNavpointRecord {
+            code: normalize_point_code(&p.identifier),
+            identifier: p.identifier.to_uppercase(),
+            kind: "navaid".to_string(),
+            name: p.name.clone(),
+            latitude: p.latitude,
+            longitude: p.longitude,
+            description: p.description.clone(),
+            frequency: p.frequency,
+            point_type: p.point_type.clone(),
+            region: p.region.clone(),
+            source: "faa_nasr".to_string(),
+        })
+        .collect();
+
+    navaids.extend(fixes.iter().cloned());
+    navaids.sort_by(|a, b| a.code.cmp(&b.code).then(a.point_type.cmp(&b.point_type)));
+    navaids.dedup_by(|a, b| {
+        a.code == b.code && a.point_type == b.point_type && a.latitude == b.latitude && a.longitude == b.longitude
+    });
+
+    let mut point_index: HashMap<String, NasrAirwayPointRecord> = HashMap::new();
+    for p in &points {
+        let normalized = normalize_point_code(&p.identifier);
+        let record = NasrAirwayPointRecord {
+            code: normalized.clone(),
+            raw_code: p.identifier.to_uppercase(),
+            kind: point_kind(&p.kind),
+            latitude: p.latitude,
+            longitude: p.longitude,
+        };
+        point_index.entry(p.identifier.to_uppercase()).or_insert(record.clone());
+        point_index.entry(normalized).or_insert(record);
+    }
+
+    let mut grouped: HashMap<String, Vec<NasrAirwayPointRecord>> = HashMap::new();
+    for seg in airway_segments {
+        let route_name = if seg.airway_id.trim().is_empty() {
+            seg.airway_name.clone()
+        } else {
+            seg.airway_id.clone()
+        };
+        let entry = grouped.entry(route_name).or_default();
+
+        let from_key = seg.from_point.to_uppercase();
+        let to_key = seg.to_point.to_uppercase();
+        let from = point_index.get(&from_key).cloned().unwrap_or(NasrAirwayPointRecord {
+            code: normalize_point_code(&from_key),
+            raw_code: from_key.clone(),
+            kind: "point".to_string(),
+            latitude: 0.0,
+            longitude: 0.0,
+        });
+        let to = point_index.get(&to_key).cloned().unwrap_or(NasrAirwayPointRecord {
+            code: normalize_point_code(&to_key),
+            raw_code: to_key.clone(),
+            kind: "point".to_string(),
+            latitude: 0.0,
+            longitude: 0.0,
+        });
+
+        if entry.last().map(|x| &x.code) != Some(&from.code) {
+            entry.push(from);
+        }
+        if entry.last().map(|x| &x.code) != Some(&to.code) {
+            entry.push(to);
+        }
+    }
+
+    let airways: Vec<NasrAirwayRecord> = grouped
+        .into_iter()
+        .map(|(name, points)| NasrAirwayRecord {
+            name,
+            source: "faa_nasr".to_string(),
+            route_class: None,
+            points,
+        })
+        .collect();
+
+    Ok(NasrResolverData {
+        airports,
+        navaids,
+        airways,
+        airspaces: nasr_airspaces,
+    })
+}
+
+fn normalize_point_code(value: &str) -> String {
+    value.split(':').next().unwrap_or(value).to_uppercase()
+}
+
+fn point_kind(kind: &str) -> String {
+    match kind {
+        "FIX" => "fix".to_string(),
+        "NAVAID" => "navaid".to_string(),
+        "AIRPORT" => "airport".to_string(),
+        _ => "point".to_string(),
+    }
+}
+
 fn parse_field15_data_from_csv_bundle(
     csv_zip: &mut ZipArchive<Cursor<Vec<u8>>>,
 ) -> Result<NasrField15Data, ThrustError> {

@@ -2,7 +2,7 @@ use pyo3::{exceptions::PyOSError, prelude::*, types::PyDict};
 use serde_json::Value;
 use std::fs::File;
 use std::path::PathBuf;
-use thrust::data::eurocontrol::aixm::airport_heliport::parse_airport_heliport_zip_file;
+use thrust::data::eurocontrol::aixm::dataset::parse_aixm_folder_path;
 use thrust::data::eurocontrol::ddr::airports::parse_airports_path;
 use thrust::data::faa::nasr::parse_field15_data_from_nasr_zip;
 
@@ -56,38 +56,20 @@ pub struct AixmAirportsSource {
 impl AixmAirportsSource {
     #[new]
     fn new(path: PathBuf) -> PyResult<Self> {
-        let zip_path = path.join("AirportHeliport.BASELINE.zip");
-        let airports = parse_airport_heliport_zip_file(zip_path)
+        let airports = parse_aixm_folder_path(path)
             .map_err(|e| PyOSError::new_err(e.to_string()))?
-            .into_values()
-            .flat_map(|airport| {
-                let mut records = vec![AirportRecord {
-                    code: airport.icao.clone(),
-                    latitude: airport.latitude,
-                    longitude: airport.longitude,
-                    altitude: Some(airport.altitude),
-                    iata: airport.iata.clone(),
-                    icao: Some(airport.icao.clone()),
-                    name: Some(airport.name.clone()),
-                    country: None,
-                    source: "eurocontrol_aixm".to_string(),
-                }];
-
-                if let Some(iata) = airport.iata {
-                    records.push(AirportRecord {
-                        code: iata.clone(),
-                        latitude: airport.latitude,
-                        longitude: airport.longitude,
-                        altitude: Some(airport.altitude),
-                        iata: Some(iata),
-                        icao: Some(airport.icao),
-                        name: Some(airport.name),
-                        country: None,
-                        source: "eurocontrol_aixm".to_string(),
-                    });
-                }
-
-                records
+            .airports
+            .into_iter()
+            .map(|airport| AirportRecord {
+                code: airport.code,
+                latitude: airport.latitude,
+                longitude: airport.longitude,
+                altitude: None,
+                iata: airport.iata,
+                icao: airport.icao,
+                name: airport.name,
+                country: None,
+                source: airport.source,
             })
             .collect();
 

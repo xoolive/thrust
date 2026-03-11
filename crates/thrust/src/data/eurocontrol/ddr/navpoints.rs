@@ -78,7 +78,7 @@ pub fn parse_navpoints_file<P: AsRef<Path>>(path: P) -> Result<Vec<DdrNavPoint>,
     parse_navpoints_reader(reader)
 }
 
-pub(crate) fn parse_navpoints_bytes(bytes: &[u8]) -> Result<Vec<DdrNavPoint>, ThrustError> {
+pub fn parse_navpoints_bytes(bytes: &[u8]) -> Result<Vec<DdrNavPoint>, ThrustError> {
     parse_navpoints_reader(BufReader::new(Cursor::new(bytes)))
 }
 

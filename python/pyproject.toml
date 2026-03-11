@@ -2,7 +2,7 @@
 name = "traffic-thrust"
 requires-python = ">=3.10"
 readme = "readme.md"
-dependencies = ["pandas>=2.2.0"]
+dependencies = ["pandas>=3.0"]
 classifiers = [
   "Programming Language :: Rust",
   "Programming Language :: Python :: Implementation :: CPython",
