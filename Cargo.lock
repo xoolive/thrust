@@ -3598,7 +3598,7 @@ dependencies = [
 
 [[package]]
 name = "thrust-py"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "numpy",
@@ -3609,7 +3609,7 @@ dependencies = [
 
 [[package]]
 name = "thrust-wasm"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "console_error_panic_hook",
@@ -3826,7 +3826,7 @@ dependencies = [
 
 [[package]]
 name = "traffic-thrust"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "csv",
