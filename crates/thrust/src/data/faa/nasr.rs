@@ -416,10 +416,21 @@ pub struct NasrAirwayRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NasrProcedureRecord {
+    pub name: String,
+    pub source: String,
+    pub procedure_kind: String,
+    pub route_class: Option<String>,
+    pub airport: Option<String>,
+    pub points: Vec<NasrAirwayPointRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NasrResolverData {
     pub airports: Vec<NasrAirportRecord>,
     pub navaids: Vec<NasrNavpointRecord>,
     pub airways: Vec<NasrAirwayRecord>,
+    pub procedures: Vec<NasrProcedureRecord>,
     pub airspaces: Vec<NasrAirspace>,
 }
 
@@ -427,8 +438,14 @@ pub fn parse_resolver_data_from_nasr_bytes(bytes: &[u8]) -> Result<NasrResolverD
     let data = parse_field15_data_from_nasr_bytes(bytes)?;
     let nasr_airspaces = parse_airspaces_from_nasr_bytes(bytes)?;
 
-    let points = data.points;
-    let airway_segments = data.airways;
+    let NasrField15Data {
+        points,
+        airways: airway_segments,
+        sid_designators,
+        star_designators,
+        sid_legs,
+        star_legs,
+    } = data;
 
     let airports: Vec<NasrAirportRecord> = points
         .iter()
@@ -551,12 +568,112 @@ pub fn parse_resolver_data_from_nasr_bytes(bytes: &[u8]) -> Result<NasrResolverD
         })
         .collect();
 
+    let procedures = build_procedure_records(&point_index, sid_designators, star_designators, sid_legs, star_legs);
+
     Ok(NasrResolverData {
         airports,
         navaids,
         airways,
+        procedures,
         airspaces: nasr_airspaces,
     })
+}
+
+fn build_procedure_records(
+    point_index: &HashMap<String, NasrAirwayPointRecord>,
+    sid_designators: Vec<String>,
+    star_designators: Vec<String>,
+    sid_legs: Vec<NasrProcedureLeg>,
+    star_legs: Vec<NasrProcedureLeg>,
+) -> Vec<NasrProcedureRecord> {
+    fn route_class_for(kind: &str) -> Option<String> {
+        match kind {
+            "SID" => Some("DP".to_string()),
+            "STAR" => Some("AP".to_string()),
+            _ => None,
+        }
+    }
+
+    fn build_one(
+        name: &str,
+        kind: &str,
+        legs: &[NasrProcedureLeg],
+        point_index: &HashMap<String, NasrAirwayPointRecord>,
+    ) -> NasrProcedureRecord {
+        let mut sorted_legs = legs.to_vec();
+        sorted_legs.sort_by_key(|leg| (leg.body_seq.unwrap_or(i32::MAX), leg.point_seq.unwrap_or(i32::MAX)));
+
+        let mut ids: Vec<String> = Vec::new();
+        for leg in &sorted_legs {
+            let point = leg.point.trim().to_uppercase();
+            if !point.is_empty() && ids.last() != Some(&point) {
+                ids.push(point);
+            }
+            if let Some(next) = &leg.next_point {
+                let next_id = next.trim().to_uppercase();
+                if !next_id.is_empty() && ids.last() != Some(&next_id) {
+                    ids.push(next_id);
+                }
+            }
+        }
+
+        let points = ids
+            .into_iter()
+            .filter_map(|id| {
+                point_index.get(&id).cloned().or_else(|| {
+                    let normalized = normalize_point_code(&id);
+                    point_index.get(&normalized).cloned()
+                })
+            })
+            .collect::<Vec<_>>();
+
+        NasrProcedureRecord {
+            name: name.to_uppercase(),
+            source: "faa_nasr".to_string(),
+            procedure_kind: kind.to_string(),
+            route_class: route_class_for(kind),
+            airport: None,
+            points,
+        }
+    }
+
+    let mut legs_by_id_kind: HashMap<(String, String), Vec<NasrProcedureLeg>> = HashMap::new();
+    for leg in sid_legs.into_iter().chain(star_legs.into_iter()) {
+        let id = leg.procedure_id.trim().to_uppercase();
+        let kind = leg.procedure_kind.trim().to_uppercase();
+        if id.is_empty() || kind.is_empty() {
+            continue;
+        }
+        legs_by_id_kind.entry((id, kind)).or_default().push(leg);
+    }
+
+    let mut all_names: Vec<(String, String)> = sid_designators
+        .into_iter()
+        .map(|name| (name.trim().to_uppercase(), "SID".to_string()))
+        .chain(
+            star_designators
+                .into_iter()
+                .map(|name| (name.trim().to_uppercase(), "STAR".to_string())),
+        )
+        .collect();
+
+    for (id, kind) in legs_by_id_kind.keys() {
+        all_names.push((id.clone(), kind.clone()));
+    }
+
+    all_names.sort();
+    all_names.dedup();
+
+    all_names
+        .into_iter()
+        .map(|(name, kind)| {
+            let legs = legs_by_id_kind
+                .get(&(name.clone(), kind.clone()))
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]);
+            build_one(&name, &kind, legs, point_index)
+        })
+        .collect()
 }
 
 fn normalize_point_code(value: &str) -> String {
@@ -1059,7 +1176,9 @@ fn inspect_delimited_content<R: std::io::Read>(file: R) -> Result<DelimitedConte
 
 #[cfg(test)]
 mod tests {
-    use super::read_csv_rows;
+    use super::{build_procedure_records, read_csv_rows, NasrAirwayPointRecord, NasrProcedureLeg};
+    use crate::data::field15::{Connector, Field15Element, Field15Parser};
+    use std::collections::HashMap;
     use std::io::{Cursor, Write};
     use zip::write::SimpleFileOptions;
     use zip::ZipWriter;
@@ -1092,5 +1211,92 @@ mod tests {
         let name = row.get("ARPT_NAME").expect("missing airport name");
         assert!(name.starts_with("LOS"));
         assert!(name.contains('�'));
+    }
+
+    #[test]
+    fn build_procedure_records_includes_sid_and_star_examples_from_notebook() {
+        let mut point_index = HashMap::new();
+        point_index.insert(
+            "FISTO".to_string(),
+            NasrAirwayPointRecord {
+                code: "FISTO".to_string(),
+                raw_code: "FISTO".to_string(),
+                kind: "fix".to_string(),
+                latitude: 43.60,
+                longitude: 1.20,
+            },
+        );
+        point_index.insert(
+            "KEPER".to_string(),
+            NasrAirwayPointRecord {
+                code: "KEPER".to_string(),
+                raw_code: "KEPER".to_string(),
+                kind: "fix".to_string(),
+                latitude: 49.50,
+                longitude: 2.30,
+            },
+        );
+
+        let sid_legs = vec![NasrProcedureLeg {
+            procedure_kind: "SID".to_string(),
+            procedure_id: "FISTO5A".to_string(),
+            route_portion_type: "COMMON".to_string(),
+            route_name: None,
+            body_seq: Some(1),
+            point_seq: Some(1),
+            point: "FISTO".to_string(),
+            next_point: None,
+        }];
+
+        let star_legs = vec![NasrProcedureLeg {
+            procedure_kind: "STAR".to_string(),
+            procedure_id: "KEPER9E".to_string(),
+            route_portion_type: "COMMON".to_string(),
+            route_name: None,
+            body_seq: Some(1),
+            point_seq: Some(1),
+            point: "KEPER".to_string(),
+            next_point: None,
+        }];
+
+        let procedures = build_procedure_records(
+            &point_index,
+            vec!["FISTO5A".to_string()],
+            vec!["KEPER9E".to_string()],
+            sid_legs,
+            star_legs,
+        );
+
+        let sid = procedures
+            .iter()
+            .find(|p| p.name == "FISTO5A")
+            .expect("missing SID FISTO5A");
+        assert_eq!(sid.procedure_kind, "SID");
+        assert_eq!(sid.route_class.as_deref(), Some("DP"));
+        assert_eq!(sid.points.first().map(|p| p.code.as_str()), Some("FISTO"));
+
+        let star = procedures
+            .iter()
+            .find(|p| p.name == "KEPER9E")
+            .expect("missing STAR KEPER9E");
+        assert_eq!(star.procedure_kind, "STAR");
+        assert_eq!(star.route_class.as_deref(), Some("AP"));
+        assert_eq!(star.points.first().map(|p| p.code.as_str()), Some("KEPER"));
+    }
+
+    #[test]
+    fn field15_parser_detects_sid_and_star_for_notebook_route() {
+        let field15 = "N0430F300 FISTO6B FISTO DCT POI DCT PEPAX UT182 NIMER/N0401F240 UT182 KEPER KEPER9E";
+        let elements = Field15Parser::parse(field15);
+
+        let has_sid = elements
+            .iter()
+            .any(|e| matches!(e, Field15Element::Connector(Connector::Sid(name)) if name == "FISTO6B"));
+        let has_star = elements
+            .iter()
+            .any(|e| matches!(e, Field15Element::Connector(Connector::Star(name)) if name == "KEPER9E"));
+
+        assert!(has_sid, "expected SID FISTO6B in parsed elements");
+        assert!(has_star, "expected STAR KEPER9E in parsed elements");
     }
 }

@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use thrust::data::eurocontrol::aixm::dataset as core;
 use thrust::data::faa::arcgis as core_arcgis;
 use thrust::data::faa::nasr as core_nasr;
@@ -30,7 +30,7 @@ pub struct NavpointRecord {
     pub source: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AirwayPointRecord {
     pub code: String,
     pub raw_code: String,
@@ -44,6 +44,16 @@ pub struct AirwayRecord {
     pub name: String,
     pub source: String,
     pub route_class: Option<String>,
+    pub points: Vec<AirwayPointRecord>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProcedureRecord {
+    pub name: String,
+    pub source: String,
+    pub procedure_kind: String,
+    pub route_class: Option<String>,
+    pub airport: Option<String>,
     pub points: Vec<AirwayPointRecord>,
 }
 
@@ -251,6 +261,19 @@ impl From<core_nasr::NasrAirwayRecord> for AirwayRecord {
             name: value.name,
             source: value.source,
             route_class: value.route_class,
+            points: value.points.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<core_nasr::NasrProcedureRecord> for ProcedureRecord {
+    fn from(value: core_nasr::NasrProcedureRecord) -> Self {
+        Self {
+            name: value.name,
+            source: value.source,
+            procedure_kind: value.procedure_kind,
+            route_class: value.route_class,
+            airport: value.airport,
             points: value.points.into_iter().map(Into::into).collect(),
         }
     }

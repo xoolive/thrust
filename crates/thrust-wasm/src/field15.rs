@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 use thrust::data::field15::{Field15Element, Field15Parser};
@@ -23,7 +23,7 @@ pub fn parse_field15(route: &str) -> Result<JsValue, JsValue> {
 }
 
 /// A resolved geographic point in an enriched route.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedPoint {
     pub latitude: f64,
     pub longitude: f64,
@@ -34,10 +34,14 @@ pub struct ResolvedPoint {
 }
 
 /// A resolved route segment (start → end with optional airway name).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RouteSegment {
     pub start: ResolvedPoint,
     pub end: ResolvedPoint,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segment_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connector: Option<String>,
 }

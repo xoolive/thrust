@@ -44,6 +44,26 @@ pub struct FaaArcgisResolver {
     airspace_index: HashMap<String, Vec<usize>>,
     navaid_index: HashMap<String, Vec<usize>>,
     airway_index: HashMap<String, Vec<usize>>,
+    sid_index: HashMap<String, Vec<usize>>,
+    star_index: HashMap<String, Vec<usize>>,
+}
+
+fn procedure_lookup_keys(name: &str) -> Vec<String> {
+    let upper = name.trim().to_uppercase();
+    if upper.is_empty() {
+        return Vec::new();
+    }
+    let mut out = vec![upper.clone()];
+    let compact = upper.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>();
+    if !compact.is_empty() {
+        out.push(compact.clone());
+        if compact.len() > 4 && compact[compact.len() - 4..].chars().all(|c| c.is_ascii_alphabetic()) {
+            out.push(compact[..compact.len() - 4].to_string());
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
 }
 
 #[wasm_bindgen]
@@ -91,9 +111,24 @@ impl FaaArcgisResolver {
         }
 
         let mut airway_index: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut sid_index: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut star_index: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, a) in airways.iter().enumerate() {
             airway_index.entry(normalize_airway_name(&a.name)).or_default().push(i);
             airway_index.entry(a.name.to_uppercase()).or_default().push(i);
+            match a.route_class.as_deref().map(|s| s.to_uppercase()) {
+                Some(rc) if rc == "DP" => {
+                    for key in procedure_lookup_keys(&a.name) {
+                        sid_index.entry(key).or_default().push(i);
+                    }
+                }
+                Some(rc) if rc == "AP" => {
+                    for key in procedure_lookup_keys(&a.name) {
+                        star_index.entry(key).or_default().push(i);
+                    }
+                }
+                _ => {}
+            }
         }
 
         Ok(Self {
@@ -105,7 +140,25 @@ impl FaaArcgisResolver {
             airspace_index,
             navaid_index,
             airway_index,
+            sid_index,
+            star_index,
         })
+    }
+
+    fn resolve_procedure_airway_by_kind(&self, kind: &str, name: &str) -> Option<AirwayRecord> {
+        let index = match kind {
+            "SID" => &self.sid_index,
+            "STAR" => &self.star_index,
+            _ => return None,
+        };
+        for key in procedure_lookup_keys(name) {
+            if let Some(i) = index.get(&key).and_then(|idx| idx.first()).copied() {
+                if let Some(item) = self.airways.get(i) {
+                    return Some(item.clone());
+                }
+            }
+        }
+        None
     }
 
     pub fn airports(&self) -> Result<JsValue, JsValue> {
@@ -204,6 +257,16 @@ impl FaaArcgisResolver {
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    pub fn resolve_sid(&self, name: String) -> Result<JsValue, JsValue> {
+        let item = self.resolve_procedure_airway_by_kind("SID", &name);
+        serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    pub fn resolve_star(&self, name: String) -> Result<JsValue, JsValue> {
+        let item = self.resolve_procedure_airway_by_kind("STAR", &name);
+        serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
     pub fn resolve_airport(&self, code: String) -> Result<JsValue, JsValue> {
         let key = code.to_uppercase();
         let item = self
@@ -232,9 +295,10 @@ impl FaaArcgisResolver {
         let mut last_point: Option<WasmPoint> = None;
         let mut pending_airway: Option<(String, WasmPoint)> = None;
         let mut current_connector: Option<String> = None;
+        let mut current_segment_type: Option<String> = None;
 
         let resolve_code = |code: &str| -> Option<WasmPoint> {
-            let key = code.to_uppercase();
+            let key = code.split('/').next().unwrap_or(code).trim().to_uppercase();
             if let Some(idx) = self.airport_index.get(&key).and_then(|v| v.first()) {
                 if let Some(a) = self.airports.get(*idx) {
                     return Some(WasmPoint {
@@ -299,10 +363,44 @@ impl FaaArcgisResolver {
                         start: prev,
                         end: next.clone(),
                         name: Some(airway_name.to_string()),
+                        segment_type: Some("route".to_string()),
+                        connector: Some(airway_name.to_string()),
                     });
                     prev = next;
                 }
                 true
+            };
+
+        let expand_procedure_from_entry =
+            |kind: &str, procedure_name: &str, entry: &WasmPoint, segs: &mut Vec<RouteSegment>| -> Option<WasmPoint> {
+                let airway = self.resolve_procedure_airway_by_kind(kind, procedure_name)?;
+                let pts = &airway.points;
+                if pts.len() < 2 {
+                    return None;
+                }
+                let entry_name = entry.name.as_deref().unwrap_or("").to_uppercase();
+                let start_idx = pts.iter().position(|p| p.code.to_uppercase() == entry_name)?;
+                if start_idx >= pts.len() - 1 {
+                    return None;
+                }
+                let mut prev = entry.clone();
+                for pt in &pts[start_idx + 1..] {
+                    let next = WasmPoint {
+                        latitude: pt.latitude,
+                        longitude: pt.longitude,
+                        name: Some(pt.code.clone()),
+                        kind: Some(pt.kind.clone()),
+                    };
+                    segs.push(RouteSegment {
+                        start: prev,
+                        end: next.clone(),
+                        name: Some(procedure_name.to_string()),
+                        segment_type: Some(kind.to_string()),
+                        connector: Some(procedure_name.to_string()),
+                    });
+                    prev = next;
+                }
+                Some(prev)
             };
 
         for element in &elements {
@@ -334,17 +432,29 @@ impl FaaArcgisResolver {
                                 segments.push(RouteSegment {
                                     start: entry,
                                     end: exit.clone(),
-                                    name: Some(airway_name),
+                                    name: Some(airway_name.clone()),
+                                    segment_type: Some("unresolved".to_string()),
+                                    connector: Some(airway_name),
                                 });
                             }
                         } else if let Some(prev) = last_point.take() {
+                            let seg_name = current_connector.take();
+                            let seg_type = current_segment_type.take();
+                            let seg_connector = if seg_type.as_deref() == Some("dct") {
+                                Some("DCT".to_string())
+                            } else {
+                                seg_name.clone()
+                            };
                             segments.push(RouteSegment {
                                 start: prev,
                                 end: exit.clone(),
-                                name: current_connector.take(),
+                                name: seg_name,
+                                segment_type: seg_type,
+                                connector: seg_connector,
                             });
                         } else {
                             current_connector = None;
+                            current_segment_type = None;
                         }
                         last_point = Some(exit);
                     }
@@ -353,15 +463,55 @@ impl FaaArcgisResolver {
                     Connector::Airway(name) => {
                         if let Some(entry) = last_point.take() {
                             pending_airway = Some((name.clone(), entry));
+                            current_segment_type = None;
                         } else {
                             current_connector = Some(name.clone());
+                            current_segment_type = Some("unresolved".to_string());
                         }
                     }
                     Connector::Direct => {
                         current_connector = None;
+                        current_segment_type = Some("dct".to_string());
                     }
-                    Connector::Sid(name) | Connector::Star(name) => {
+                    Connector::Sid(name) => {
+                        if let Some(entry) = last_point.clone() {
+                            if let Some(end) = expand_procedure_from_entry("SID", name, &entry, &mut segments) {
+                                last_point = Some(end);
+                                current_connector = None;
+                                pending_airway = None;
+                                current_segment_type = None;
+                            } else {
+                                current_connector = Some(name.clone());
+                                current_segment_type = Some("unresolved".to_string());
+                            }
+                        } else {
+                            current_connector = Some(name.clone());
+                            current_segment_type = Some("unresolved".to_string());
+                        }
+                    }
+                    Connector::Star(name) => {
+                        if let Some(entry) = last_point.clone() {
+                            if let Some(end) = expand_procedure_from_entry("STAR", name, &entry, &mut segments) {
+                                last_point = Some(end);
+                                current_connector = None;
+                                pending_airway = None;
+                                current_segment_type = None;
+                            } else {
+                                current_connector = Some(name.clone());
+                                current_segment_type = Some("unresolved".to_string());
+                            }
+                        } else {
+                            current_connector = Some(name.clone());
+                            current_segment_type = Some("unresolved".to_string());
+                        }
+                    }
+                    Connector::Nat(name) => {
                         current_connector = Some(name.clone());
+                        current_segment_type = Some("NAT".to_string());
+                    }
+                    Connector::Pts(name) => {
+                        current_connector = Some(name.clone());
+                        current_segment_type = Some("PTS".to_string());
                     }
                     _ => {}
                 },
@@ -370,5 +520,64 @@ impl FaaArcgisResolver {
         }
 
         serde_wasm_bindgen::to_value(&segments).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{procedure_lookup_keys, FaaArcgisResolver};
+    use crate::models::{AirwayPointRecord, AirwayRecord};
+
+    #[test]
+    fn procedure_lookup_keys_extracts_base_designator() {
+        let keys = procedure_lookup_keys("KEPER9ELFBO");
+        assert!(keys.contains(&"KEPER9ELFBO".to_string()));
+        assert!(keys.contains(&"KEPER9E".to_string()));
+    }
+
+    #[test]
+    fn resolve_star_uses_ap_airway_records() {
+        let resolver = FaaArcgisResolver {
+            airports: Vec::new(),
+            airspaces: Vec::new(),
+            navaids: Vec::new(),
+            airways: vec![AirwayRecord {
+                name: "KEPER9ELFBO".to_string(),
+                source: "faa_arcgis".to_string(),
+                route_class: Some("AP".to_string()),
+                points: vec![
+                    AirwayPointRecord {
+                        code: "KEPER".to_string(),
+                        raw_code: "KEPER".to_string(),
+                        kind: "fix".to_string(),
+                        latitude: 44.0,
+                        longitude: 2.0,
+                    },
+                    AirwayPointRecord {
+                        code: "LFBO".to_string(),
+                        raw_code: "LFBO".to_string(),
+                        kind: "airport".to_string(),
+                        latitude: 43.6,
+                        longitude: 1.4,
+                    },
+                ],
+            }],
+            airport_index: std::collections::HashMap::new(),
+            airspace_index: std::collections::HashMap::new(),
+            navaid_index: std::collections::HashMap::new(),
+            airway_index: std::collections::HashMap::new(),
+            sid_index: std::collections::HashMap::new(),
+            star_index: {
+                let mut m = std::collections::HashMap::new();
+                m.insert("KEPER9E".to_string(), vec![0]);
+                m
+            },
+        };
+
+        let star = resolver
+            .resolve_procedure_airway_by_kind("STAR", "KEPER9E")
+            .expect("missing STAR");
+        assert_eq!(star.route_class.as_deref(), Some("AP"));
+        assert_eq!(star.name, "KEPER9ELFBO");
     }
 }
