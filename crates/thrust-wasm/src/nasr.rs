@@ -5,8 +5,8 @@ use wasm_bindgen::prelude::*;
 use thrust::data::faa::nasr::parse_resolver_data_from_nasr_bytes;
 
 use crate::models::{
-    normalize_airway_name, AirportRecord, AirspaceCompositeRecord, AirspaceLayerRecord, AirspaceRecord,
-    AirwayPointRecord, AirwayRecord, NavpointRecord, ProcedureRecord,
+    normalize_airway_name, AirportRecord, AirspaceCompositeRecord, AirspaceLayerRecord, AirspaceRecord, AirwayRecord,
+    NavpointRecord, ProcedureRecord,
 };
 
 fn compose_airspace(records: Vec<AirspaceRecord>) -> Option<AirspaceCompositeRecord> {
@@ -530,6 +530,7 @@ impl NasrResolver {
 mod tests {
     use super::*;
     use crate::field15::RouteSegment;
+    use crate::models::AirwayPointRecord;
 
     fn sample_resolver() -> NasrResolver {
         let airports = vec![AirportRecord {
