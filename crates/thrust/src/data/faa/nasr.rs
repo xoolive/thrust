@@ -638,7 +638,7 @@ fn build_procedure_records(
     }
 
     let mut legs_by_id_kind: HashMap<(String, String), Vec<NasrProcedureLeg>> = HashMap::new();
-    for leg in sid_legs.into_iter().chain(star_legs.into_iter()) {
+    for leg in sid_legs.into_iter().chain(star_legs) {
         let id = leg.procedure_id.trim().to_uppercase();
         let kind = leg.procedure_kind.trim().to_uppercase();
         if id.is_empty() || kind.is_empty() {
@@ -816,23 +816,21 @@ fn parse_saa_xml_airspaces(xml: &[u8]) -> Vec<NasrAirspace> {
                     }
                 }
             }
-            Ok(Event::End(e)) => {
-                if tag_is(e.name().as_ref(), b"Airspace") && in_airspace {
-                    let key = designator.clone().or_else(|| name.clone());
-                    if let Some(des) = key {
-                        if coords.len() >= 3 {
-                            out.push(NasrAirspace {
-                                designator: des,
-                                name: name.clone(),
-                                type_: type_.clone(),
-                                lower,
-                                upper,
-                                coordinates: coords.clone(),
-                            });
-                        }
+            Ok(Event::End(e)) if tag_is(e.name().as_ref(), b"Airspace") && in_airspace => {
+                let key = designator.clone().or_else(|| name.clone());
+                if let Some(des) = key {
+                    if coords.len() >= 3 {
+                        out.push(NasrAirspace {
+                            designator: des,
+                            name: name.clone(),
+                            type_: type_.clone(),
+                            lower,
+                            upper,
+                            coordinates: coords.clone(),
+                        });
                     }
-                    in_airspace = false;
                 }
+                in_airspace = false;
             }
             Ok(Event::Eof) | Err(_) => break,
             _ => {}

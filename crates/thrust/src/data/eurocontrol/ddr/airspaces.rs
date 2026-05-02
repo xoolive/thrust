@@ -244,22 +244,18 @@ pub fn parse_spc_file<P: AsRef<Path>>(path: P) -> Result<Vec<DdrCollapsedSector>
             continue;
         }
         match parts[0] {
-            "A" => {
-                if parts.len() >= 4 {
-                    current_name = parts[1].to_string();
-                    current_type = parts.get(3).map(|s| s.to_string());
-                }
+            "A" if parts.len() >= 4 => {
+                current_name = parts[1].to_string();
+                current_type = parts.get(3).map(|s| s.to_string());
             }
-            "S" => {
-                if parts.len() >= 3 {
-                    let component = parts[1].to_string();
-                    list.push(DdrCollapsedSector {
-                        designator: current_name.clone(),
-                        component: component.clone(),
-                        name: Some(parts[2].to_string()),
-                        sector_type: current_type.clone(),
-                    });
-                }
+            "S" if parts.len() >= 3 => {
+                let component = parts[1].to_string();
+                list.push(DdrCollapsedSector {
+                    designator: current_name.clone(),
+                    component: component.clone(),
+                    name: Some(parts[2].to_string()),
+                    sector_type: current_type.clone(),
+                });
             }
             _ => {}
         }
