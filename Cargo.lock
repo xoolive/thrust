@@ -2822,9 +2822,9 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
-version = "0.39.2"
+version = "0.40.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "958f21e8e7ceb5a1aa7fa87fab28e7c75976e0bfe7e23ff069e0a260f894067d"
+checksum = "2474bd2e5029e7ccb6abb2ba48cf2383a333851dedf495901544281590c7da7f"
 dependencies = [
  "memchr",
 ]
@@ -3702,7 +3702,7 @@ dependencies = [
  "console_error_panic_hook",
  "getrandom 0.3.4",
  "js-sys",
- "quick-xml 0.39.2",
+ "quick-xml 0.40.1",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
@@ -3924,7 +3924,7 @@ dependencies = [
  "numpy",
  "once_cell",
  "polars",
- "quick-xml 0.39.2",
+ "quick-xml 0.40.1",
  "reqwest",
  "serde",
  "serde_json",
