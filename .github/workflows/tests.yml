@@ -13,7 +13,7 @@ jobs:
   rust-core-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -177,7 +177,7 @@ jobs:
       FAA_TEST_DATA_DIR: ${{ github.workspace }}/.ci-cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -210,7 +210,7 @@ jobs:
       THRUST_AIXM_PATH: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol/AIXM
       THRUST_DDR_PATH: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol/DDR
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -251,7 +251,7 @@ jobs:
       run:
         working-directory: python
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -295,7 +295,7 @@ jobs:
       run:
         working-directory: python
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -340,7 +340,7 @@ jobs:
       FAA_TEST_DATA_DIR: ${{ github.workspace }}/.ci-cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -401,7 +401,7 @@ jobs:
       THRUST_AIXM_PATH: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol/AIXM
       THRUST_DDR_PATH: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol/DDR
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
