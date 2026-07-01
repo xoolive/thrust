@@ -27,13 +27,14 @@ reqwest = { version = "0.12.28", default-features = false, features = ["blocking
 tokio = { version = "1", features = ["full"], optional = true }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", optional = true }
-warp = { version = "0.4.3", features = ["server"], optional = true }
+axum = { version = "0.8", features = ["macros", "tokio"], optional = true }
+tower-http = { version = "0.7", features = ["cors"], optional = true }
 zip = "8.6.0"
 
 [features]
 default = []
 net = ["dep:reqwest"]
-rest = ["dep:warp", "dep:tokio", "dep:tracing-subscriber"]
+rest = ["dep:axum", "dep:tokio", "dep:tracing-subscriber", "dep:tower-http"]
 
 [dev-dependencies]
 dotenvy = "0.15.7"

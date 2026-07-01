@@ -1,9 +1,15 @@
+use axum::extract::{Json, State};
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::routing::post;
+use axum::Router;
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::{path::Path, sync::Arc};
+use std::path::Path;
+use std::sync::Arc;
 use thrust::data::eurocontrol::database::AirwayDatabase;
 use thrust::data::field15::Field15Parser;
-use warp::Filter;
+use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Debug, Deserialize)]
 struct RouteRequest {
@@ -20,24 +26,22 @@ struct AppState {
     database: AirwayDatabase,
 }
 
-fn with_state(
-    state: Arc<AppState>,
-) -> impl Filter<Extract = (Arc<AppState>,), Error = std::convert::Infallible> + Clone {
-    warp::any().map(move || state.clone())
-}
-
-async fn resolve_route(payload: RouteRequest, state: Arc<AppState>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn resolve_route(
+    State(_state): State<Arc<AppState>>,
+    Json(payload): Json<RouteRequest>,
+) -> impl IntoResponse {
     eprintln!("Received route to resolve: {}", payload.route);
     let elements = Field15Parser::parse(&payload.route);
-    let enriched = state.database.enrich_route(elements);
+    let enriched = _state.database.enrich_route(elements);
 
-    Ok(warp::reply::with_status(
-        warp::reply::json(&RouteResponse {
+    (
+        StatusCode::OK,
+        Json(RouteResponse {
             route: payload.route.clone(),
             segments: enriched,
         }),
-        warp::http::StatusCode::OK,
-    ))
+    )
+        .into_response()
 }
 
 #[tokio::main]
@@ -61,23 +65,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = Arc::new(AppState { database });
 
     // Configure CORS
-    let cors = warp::cors()
-        .allow_any_origin()
-        .allow_methods(vec!["GET", "POST", "OPTIONS"])
-        .allow_headers(vec!["Content-Type", "Authorization"]);
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
 
     // Build the route
-    let resolve = warp::path("resolve")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_state(state))
-        .and_then(resolve_route)
-        .with(cors);
+    let app = Router::new()
+        .route("/resolve", post(resolve_route))
+        .with_state(state)
+        .layer(cors);
 
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
     println!("Server listening on http://127.0.0.1:3000");
     println!("POST to /resolve with JSON: {{\"route\": \"YOUR_ROUTE_STRING\"}}");
 
-    warp::serve(resolve).run(([127, 0, 0, 1], 3000)).await;
+    axum::serve(listener, app).await?;
 
     Ok(())
 }
