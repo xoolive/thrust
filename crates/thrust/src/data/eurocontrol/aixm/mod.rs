@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use quick_xml::{events::Event, name::QName, Reader};
+use quick_xml::{events::Event, name::QName, Reader, XmlVersion};
 
 use crate::error::ThrustError;
 
@@ -46,7 +46,10 @@ fn find_node<'a, R: std::io::BufRead>(
                         for attr in e.attributes().with_checks(false) {
                             let attr = attr?;
                             let key = std::str::from_utf8(attr.key.0)?;
-                            attributes.insert(key.to_string(), attr.unescape_value()?.to_string());
+                            attributes.insert(
+                                key.to_string(),
+                                attr.normalized_value(XmlVersion::Implicit1_0)?.to_string(),
+                            );
                         }
 
                         return Ok(Node { name: *elt, attributes });
@@ -61,7 +64,10 @@ fn find_node<'a, R: std::io::BufRead>(
                         for attr in e.attributes().with_checks(false) {
                             let attr = attr?;
                             let key = std::str::from_utf8(attr.key.0)?;
-                            attributes.insert(key.to_string(), attr.unescape_value()?.to_string());
+                            attributes.insert(
+                                key.to_string(),
+                                attr.normalized_value(XmlVersion::Implicit1_0)?.to_string(),
+                            );
                         }
 
                         return Ok(Node { name: *elt, attributes });
@@ -116,7 +122,7 @@ pub fn read_attribute<R: std::io::BufRead>(
                 for attr in e.attributes().with_checks(false) {
                     let attr = attr?;
                     if attr.key == attr_name {
-                        return Ok(Some(attr.unescape_value()?.to_string()));
+                        return Ok(Some(attr.normalized_value(XmlVersion::Implicit1_0)?.to_string()));
                     }
                 }
             }
