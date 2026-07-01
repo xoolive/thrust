@@ -46,7 +46,10 @@ fn find_node<'a, R: std::io::BufRead>(
                         for attr in e.attributes().with_checks(false) {
                             let attr = attr?;
                             let key = std::str::from_utf8(attr.key.0)?;
-                            attributes.insert(key.to_string(), attr.normalized_value(XmlVersion::Implicit1_0)?.to_string());
+                            attributes.insert(
+                                key.to_string(),
+                                attr.normalized_value(XmlVersion::Implicit1_0)?.to_string(),
+                            );
                         }
 
                         return Ok(Node { name: *elt, attributes });
@@ -61,7 +64,10 @@ fn find_node<'a, R: std::io::BufRead>(
                         for attr in e.attributes().with_checks(false) {
                             let attr = attr?;
                             let key = std::str::from_utf8(attr.key.0)?;
-                            attributes.insert(key.to_string(), attr.normalized_value(XmlVersion::Implicit1_0)?.to_string());
+                            attributes.insert(
+                                key.to_string(),
+                                attr.normalized_value(XmlVersion::Implicit1_0)?.to_string(),
+                            );
                         }
 
                         return Ok(Node { name: *elt, attributes });

@@ -26,10 +26,7 @@ struct AppState {
     database: AirwayDatabase,
 }
 
-async fn resolve_route(
-    State(_state): State<Arc<AppState>>,
-    Json(payload): Json<RouteRequest>,
-) -> impl IntoResponse {
+async fn resolve_route(State(_state): State<Arc<AppState>>, Json(payload): Json<RouteRequest>) -> impl IntoResponse {
     eprintln!("Received route to resolve: {}", payload.route);
     let elements = Field15Parser::parse(&payload.route);
     let enriched = _state.database.enrich_route(elements);
@@ -65,10 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = Arc::new(AppState { database });
 
     // Configure CORS
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let cors = CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any);
 
     // Build the route
     let app = Router::new()
