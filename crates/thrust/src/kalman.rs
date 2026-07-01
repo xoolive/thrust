@@ -14,8 +14,9 @@ pub fn kalman6d(df: DataFrame) -> KalmanOutput {
     // Initialize all results arrays
     let mut x_mes: Array2<f64> = Array2::zeros((n_rows, n_cols));
 
-    for (j, col) in df.columns(["x", "y", "z", "dx", "dy", "dz"])?.into_iter().enumerate() {
-        for (i, value) in col.f64()?.into_iter().enumerate() {
+    for (j, name) in ["x", "y", "z", "dx", "dy", "dz"].into_iter().enumerate() {
+        let col = df.column(name)?;
+        for (i, value) in col.f64()?.iter().enumerate() {
             x_mes[(i, j)] = value.map_or(1e24, |v| v);
         }
     }
