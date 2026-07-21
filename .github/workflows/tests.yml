@@ -107,7 +107,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol
-          key: eurocontrol-data-v1
+          key: eurocontrol-data-v2
 
       - name: Populate Eurocontrol cache folders
         if: steps.eurocontrol-cache.outputs.cache-hit != 'true'
@@ -137,7 +137,18 @@ jobs:
           AIXM_ZIP="$ROOT/aixm_2413.zip"
           DDR_ZIP="$ROOT/ddr_2111.zip"
           download_if_missing "$AIXM_ZIP" "https://www.dropbox.com/scl/fo/bwsaaoaj5jvhu1h3vhs7n/AH4x2Yx1cR8AmMIt90A8prk?rlkey=z20d7taw4l6inphiat0jbhgie&dl=1"
-          download_if_missing "$DDR_ZIP" "https://www.dropbox.com/scl/fo/5wnsn1kh10obwedzxxa17/APiyJ0IzO8i9wVlP7YRGWyU?rlkey=3vnhvhs3i2bpt8ebg47m74veb&st=0db2doel&dl=1"
+          download_if_missing "$DDR_ZIP" "https://www.dropbox.com/scl/fi/e7qzxwhbktp7q0xh4dsba/ENV_PostOPS_AIRAC_2111_04NOV2021_With_Airspace_Closure.zip?rlkey=wv5fi5ncmkv915rq1pkqla1pe&st=26cqgofr&dl=1"
+
+          # Dropbox serves a 200 "File Deleted" HTML page for dead shared links,
+          # which `curl -f` treats as success. Validate the downloads are real
+          # zips before extraction so a broken link fails loudly here instead of
+          # surfacing later as a cryptic BadZipFile during folder extraction.
+          for f in "$AIXM_ZIP" "$DDR_ZIP"; do
+            if ! python -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1])' "$f"; then
+              echo "$f is not a valid zip — the Dropbox shared link may be dead" >&2
+              exit 1
+            fi
+          done
 
           if [ ! -f "$ROOT/AIXM/AirportHeliport.BASELINE.zip" ]; then
             rm -rf "$ROOT/AIXM" "$ROOT/aixm_extract"
