@@ -674,11 +674,8 @@ impl Field15Parser {
 
         // Check if it's a coordinate - must be checked before bearing/distance
         if Self::is_coordinate(token) {
-            if let Some(coord) = Self::parse_coordinate(token) {
-                return Some(Point::Coordinates(coord));
-            } else {
-                return None;
-            }
+            let coord = Self::parse_coordinate(token)?;
+            return Some(Point::Coordinates(coord));
         }
 
         // Check for bearing/distance format (e.g., POINT180060 or 02S001W180060)
