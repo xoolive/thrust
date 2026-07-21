@@ -407,6 +407,7 @@ where
 }
 
 #[cfg(test)]
+#[allow(unknown_lints, clippy::useless_borrows_in_formatting)]
 mod tests {
 
     use super::Interval;
@@ -426,7 +427,7 @@ mod tests {
         assert_ne!(shifted, I1);
         assert_eq!(shifted, I2);
         assert_eq!(format!("{:?}", &shifted), "Interval { start: 1, stop: 2 }");
-        assert_eq!(format!("{:}", &shifted), "[1, 2]");
+        assert_eq!(format!("{}", &shifted), "[1, 2]");
     }
 
     #[test]
