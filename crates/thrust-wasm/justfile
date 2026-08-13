@@ -1,6 +1,6 @@
 _default: pkg
 
-pkg: pkgdir
+pkg: types_check pkgdir
   @just build_wasm bundler esm
   @just build_wasm web web
   @just build_wasm nodejs nodejs
@@ -19,3 +19,9 @@ copy_readme:
 
 build_package_json:
   jq -s '.[0] * .[1]' pkg/esm/package.json package.json.patch > pkg/package.json
+
+types_check:
+  cargo test -p thrust-wasm --features typescript typescript_tests::typescript_types_are_current -- --exact
+
+types_generate:
+  cargo test -p thrust-wasm --features typescript typescript_tests::write_typescript_types -- --ignored --exact

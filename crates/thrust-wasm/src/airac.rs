@@ -7,7 +7,8 @@ use thrust::data::airac::{
 };
 
 #[derive(Clone, Debug, Serialize)]
-struct AiracIntervalRecord {
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
+pub(crate) struct AiracIntervalRecord {
     begin: String,
     end: String,
 }
@@ -25,7 +26,7 @@ pub fn effective_date_from_airac_code(airac_code: String) -> Result<String, JsVa
     Ok(date.format("%Y-%m-%d").to_string())
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(unchecked_return_type = "AiracIntervalRecord")]
 pub fn airac_interval(airac_code: String) -> Result<JsValue, JsValue> {
     let (begin, end) = rs_airac_interval(&airac_code).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let payload = AiracIntervalRecord {
