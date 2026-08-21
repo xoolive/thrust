@@ -395,6 +395,9 @@ jobs:
       - name: WASM linting
         run: cargo clippy -p thrust-wasm --all-targets -- -D warnings
 
+      - name: TypeScript declaration drift
+        run: cargo test -p thrust-wasm --features typescript typescript_tests::typescript_types_are_current -- --exact
+
       - name: TS linting
         run: npm run lint
         working-directory: crates/thrust-wasm/tests-ts
@@ -464,6 +467,10 @@ jobs:
 
       - name: Install TS test dependencies
         run: npm install
+        working-directory: crates/thrust-wasm/tests-ts
+
+      - name: TS package declaration typecheck
+        run: npm run typecheck:package
         working-directory: crates/thrust-wasm/tests-ts
 
       - name: Run TS tests

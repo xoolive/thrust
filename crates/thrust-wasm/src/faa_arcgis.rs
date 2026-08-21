@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use js_sys::Array;
+use serde::Deserialize;
 use serde_json::Value;
 use thrust::data::faa::arcgis::parse_arcgis_features;
 use wasm_bindgen::prelude::*;
@@ -66,22 +66,26 @@ fn procedure_lookup_keys(name: &str) -> Vec<String> {
     out
 }
 
+#[derive(Deserialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
+pub(crate) struct ArcgisFeatureCollectionInput {
+    #[cfg_attr(feature = "typescript", ts(optional = nullable))]
+    features: Option<Vec<Value>>,
+}
+
 #[wasm_bindgen]
 impl FaaArcgisResolver {
     #[wasm_bindgen(constructor)]
-    pub fn new(feature_collections_json: JsValue) -> Result<FaaArcgisResolver, JsValue> {
-        let payloads = Array::from(&feature_collections_json);
-        let mut features: Vec<Value> = Vec::new();
-        for payload in payloads.iter() {
-            let value: Value =
-                serde_wasm_bindgen::from_value(payload).map_err(|e| JsValue::from_str(&e.to_string()))?;
-            let arr = value
-                .get("features")
-                .and_then(|x| x.as_array())
-                .cloned()
-                .unwrap_or_default();
-            features.extend(arr);
-        }
+    pub fn new(
+        #[wasm_bindgen(unchecked_param_type = "ReadonlyArray<ArcgisFeatureCollectionInput>")]
+        feature_collections_json: JsValue,
+    ) -> Result<FaaArcgisResolver, JsValue> {
+        let payloads: Vec<ArcgisFeatureCollectionInput> =
+            serde_wasm_bindgen::from_value(feature_collections_json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let features = payloads
+            .into_iter()
+            .flat_map(|payload| payload.features.unwrap_or_default())
+            .collect::<Vec<_>>();
 
         let dataset = parse_arcgis_features(&features);
         let airports: Vec<AirportRecord> = dataset.airports.into_iter().map(Into::into).collect();
@@ -161,22 +165,27 @@ impl FaaArcgisResolver {
         None
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirportRecord[]")]
     pub fn airports(&self) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(&self.airports).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "NavpointRecord[]")]
     pub fn fixes(&self) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(&self.navaids).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "NavpointRecord[]")]
     pub fn navaids(&self) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(&self.navaids).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirwayRecord[]")]
     pub fn airways(&self) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(&self.airways).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirspaceCompositeRecord[]")]
     pub fn airspaces(&self) -> Result<JsValue, JsValue> {
         let mut keys = self.airspace_index.keys().cloned().collect::<Vec<_>>();
         keys.sort();
@@ -196,6 +205,7 @@ impl FaaArcgisResolver {
         serde_wasm_bindgen::to_value(&rows).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirspaceCompositeRecord | undefined")]
     pub fn resolve_airspace(&self, designator: String) -> Result<JsValue, JsValue> {
         let key = designator.to_uppercase();
         let records = self
@@ -209,6 +219,7 @@ impl FaaArcgisResolver {
         serde_wasm_bindgen::to_value(&compose_airspace(records)).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "NavpointRecord | undefined")]
     pub fn resolve_fix(&self, code: String) -> Result<JsValue, JsValue> {
         let key = code.to_uppercase();
         // Prefer records with kind == "fix"; fall back to the first match.
@@ -227,6 +238,7 @@ impl FaaArcgisResolver {
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "NavpointRecord | undefined")]
     pub fn resolve_navaid(&self, code: String) -> Result<JsValue, JsValue> {
         let key = code.to_uppercase();
         // Prefer records with kind == "navaid"; fall back to the first match.
@@ -245,6 +257,7 @@ impl FaaArcgisResolver {
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirwayRecord | undefined")]
     pub fn resolve_airway(&self, name: String) -> Result<JsValue, JsValue> {
         let key = normalize_airway_name(&name);
         let item = self
@@ -257,16 +270,19 @@ impl FaaArcgisResolver {
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirwayRecord | undefined")]
     pub fn resolve_sid(&self, name: String) -> Result<JsValue, JsValue> {
         let item = self.resolve_procedure_airway_by_kind("SID", &name);
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirwayRecord | undefined")]
     pub fn resolve_star(&self, name: String) -> Result<JsValue, JsValue> {
         let item = self.resolve_procedure_airway_by_kind("STAR", &name);
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirportRecord | undefined")]
     pub fn resolve_airport(&self, code: String) -> Result<JsValue, JsValue> {
         let key = code.to_uppercase();
         let item = self
@@ -284,7 +300,7 @@ impl FaaArcgisResolver {
     /// Same contract as `EurocontrolResolver::enrichRoute` and `NasrResolver::enrichRoute` —
     /// returns a JS array of `{ start, end, name? }` segment objects resolved against the
     /// FAA ArcGIS nav data.
-    #[wasm_bindgen(js_name = enrichRoute)]
+    #[wasm_bindgen(js_name = enrichRoute, unchecked_return_type = "RouteSegment[]")]
     pub fn enrich_route(&self, route: String) -> Result<JsValue, JsValue> {
         use crate::field15::ResolvedPoint as WasmPoint;
         use crate::field15::RouteSegment;

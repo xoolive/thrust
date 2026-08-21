@@ -23,6 +23,7 @@ polars = { version = "0.54.4", features = ["lazy", "timezones", "rolling_window"
 quick-xml = "0.41.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.150"
+ts-rs = { version = "11", features = ["no-serde-warnings"], optional = true }
 reqwest = { version = "0.12.28", default-features = false, features = ["blocking", "json", "rustls-tls"], optional = true }
 tokio = { version = "1", features = ["full"], optional = true }
 tracing = "0.1.44"
@@ -33,6 +34,7 @@ zip = "8.6.0"
 
 [features]
 default = []
+typescript = ["dep:ts-rs"]
 net = ["dep:reqwest"]
 rest = ["dep:axum", "dep:tokio", "dep:tracing-subscriber", "dep:tower-http"]
 

@@ -16,7 +16,7 @@ use thrust::data::field15::{Field15Element, Field15Parser};
 ///   - `{ "STAR": "LORNI1A" }` — STAR designator
 ///   - `{ "speed": ..., "altitude": ... }` — speed/altitude modifier
 ///   - `"VFR"`, `"IFR"`, `"OAT"`, `"GAT"`, `"IFPSTOP"`, `"IFPSTART"`, `{ "STAY": ... }`, ...
-#[wasm_bindgen(js_name = parseField15)]
+#[wasm_bindgen(js_name = parseField15, unchecked_return_type = "Field15Element[]")]
 pub fn parse_field15(route: &str) -> Result<JsValue, JsValue> {
     let elements: Vec<Field15Element> = Field15Parser::parse(route);
     serde_wasm_bindgen::to_value(&elements).map_err(|e| JsValue::from_str(&e.to_string()))
@@ -24,6 +24,8 @@ pub fn parse_field15(route: &str) -> Result<JsValue, JsValue> {
 
 /// A resolved geographic point in an enriched route.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
+#[cfg_attr(feature = "typescript", ts(optional_fields))]
 pub struct ResolvedPoint {
     pub latitude: f64,
     pub longitude: f64,
@@ -35,6 +37,8 @@ pub struct ResolvedPoint {
 
 /// A resolved route segment (start → end with optional airway name).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
+#[cfg_attr(feature = "typescript", ts(optional_fields))]
 pub struct RouteSegment {
     pub start: ResolvedPoint,
     pub end: ResolvedPoint,

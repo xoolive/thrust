@@ -6,6 +6,7 @@
     "lint": "eslint test --ext .ts",
     "lint:fix": "eslint test --ext .ts --fix",
     "typecheck": "tsc --noEmit",
+    "typecheck:package": "tsc --noEmit -p tsconfig.package.json",
     "test": "tsx test/run.ts"
   },
   "devDependencies": {

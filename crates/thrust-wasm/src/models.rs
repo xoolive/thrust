@@ -4,6 +4,8 @@ use thrust::data::faa::arcgis as core_arcgis;
 use thrust::data::faa::nasr as core_nasr;
 
 #[derive(Clone, Debug, Serialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
+#[cfg_attr(feature = "typescript", ts(optional_fields))]
 pub struct AirportRecord {
     pub code: String,
     pub iata: Option<String>,
@@ -16,6 +18,8 @@ pub struct AirportRecord {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
+#[cfg_attr(feature = "typescript", ts(optional_fields))]
 pub struct NavpointRecord {
     pub code: String,
     pub identifier: String,
@@ -31,6 +35,7 @@ pub struct NavpointRecord {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
 pub struct AirwayPointRecord {
     pub code: String,
     pub raw_code: String,
@@ -40,6 +45,8 @@ pub struct AirwayPointRecord {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
+#[cfg_attr(feature = "typescript", ts(optional_fields))]
 pub struct AirwayRecord {
     pub name: String,
     pub source: String,
@@ -48,6 +55,8 @@ pub struct AirwayRecord {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
+#[cfg_attr(feature = "typescript", ts(optional_fields))]
 pub struct ProcedureRecord {
     pub name: String,
     pub source: String,
@@ -69,6 +78,8 @@ pub struct AirspaceRecord {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
+#[cfg_attr(feature = "typescript", ts(optional_fields))]
 pub struct AirspaceLayerRecord {
     pub lower: Option<f64>,
     pub upper: Option<f64>,
@@ -76,6 +87,8 @@ pub struct AirspaceLayerRecord {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
+#[cfg_attr(feature = "typescript", ts(optional_fields))]
 pub struct AirspaceCompositeRecord {
     pub designator: String,
     pub name: Option<String>,

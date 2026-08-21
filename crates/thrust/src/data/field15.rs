@@ -66,6 +66,7 @@ use std::fmt;
 
 /// A single element in a Field 15 ICAO route
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
 #[serde(untagged)]
 pub enum Field15Element {
     /// A point in the route (waypoint, coordinate, or navaid)
@@ -78,6 +79,7 @@ pub enum Field15Element {
 
 /// A point in the route (waypoint, coordinate, or navaid)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
 pub enum Point {
     /// Named waypoint or navaid (Published Route Point)  
     /// - Basic point: `[A-Z]{1,3}`  
@@ -109,6 +111,8 @@ pub enum Point {
 
 /// A connector between points (airway or direct)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
+#[cfg_attr(feature = "typescript", ts(optional_fields))]
 pub enum Connector {
     /// ATS routes (e.g., "UM184", "L738", "A308")
     ///
@@ -177,6 +181,8 @@ pub enum Connector {
 
 ///  A modifier that changes flight parameters
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
+#[cfg_attr(feature = "typescript", ts(optional_fields))]
 pub struct Modifier {
     /// Speed (e.g., "N0456" for 456 knots, "M079" for Mach 0.79, "K0893" for 893 km/h)
     pub speed: Option<Speed>,
@@ -186,12 +192,14 @@ pub struct Modifier {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub altitude_cruise_to: Option<Altitude>,
     /// Cruise climb indicator (e.g., "PLUS" after speed/altitude)
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "typescript", ts(optional, as = "Option<_>"))]
     pub cruise_climb: bool,
 }
 
 /// Speed representation
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
 pub enum Speed {
     /// Knots (N followed by 4 digits)
     #[serde(rename = "kts")]
@@ -206,6 +214,7 @@ pub enum Speed {
 
 /// Altitude representation
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript", derive(ts_rs::TS))]
 pub enum Altitude {
     /// Flight level (F followed by 3 digits)
     #[serde(rename = "FL")]

@@ -636,7 +636,9 @@ fn procedure_lookup_keys(name: &str) -> Vec<String> {
 #[wasm_bindgen]
 impl EurocontrolResolver {
     #[wasm_bindgen(constructor)]
-    pub fn new(aixm_folder: JsValue) -> Result<EurocontrolResolver, JsValue> {
+    pub fn new(
+        #[wasm_bindgen(unchecked_param_type = "Record<string, Uint8Array>")] aixm_folder: JsValue,
+    ) -> Result<EurocontrolResolver, JsValue> {
         let files: HashMap<String, Vec<u8>> =
             serde_wasm_bindgen::from_value(aixm_folder).map_err(|e| JsValue::from_str(&e.to_string()))?;
         let dataset = parse_aixm_folder_bytes(&files).map_err(|e| JsValue::from_str(&e.to_string()))?;
@@ -650,7 +652,9 @@ impl EurocontrolResolver {
     }
 
     #[wasm_bindgen(js_name = fromDdrFolder)]
-    pub fn from_ddr_folder(ddr_folder: JsValue) -> Result<EurocontrolResolver, JsValue> {
+    pub fn from_ddr_folder(
+        #[wasm_bindgen(unchecked_param_type = "Record<string, string>")] ddr_folder: JsValue,
+    ) -> Result<EurocontrolResolver, JsValue> {
         let files: HashMap<String, String> =
             serde_wasm_bindgen::from_value(ddr_folder).map_err(|e| JsValue::from_str(&e.to_string()))?;
         build_from_ddr_text_files(files)
@@ -760,22 +764,27 @@ impl EurocontrolResolver {
         None
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirportRecord[]")]
     pub fn airports(&self) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(&self.airports).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "NavpointRecord[]")]
     pub fn fixes(&self) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(&self.navaids).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "NavpointRecord[]")]
     pub fn navaids(&self) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(&self.navaids).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirwayRecord[]")]
     pub fn airways(&self) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(&self.airways).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirspaceCompositeRecord[]")]
     pub fn airspaces(&self) -> Result<JsValue, JsValue> {
         let mut keys = self.airspace_index.keys().cloned().collect::<Vec<_>>();
         keys.sort();
@@ -795,6 +804,7 @@ impl EurocontrolResolver {
         serde_wasm_bindgen::to_value(&rows).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirportRecord | undefined")]
     pub fn resolve_airport(&self, code: String) -> Result<JsValue, JsValue> {
         let key = code.to_uppercase();
         let item = self
@@ -806,6 +816,7 @@ impl EurocontrolResolver {
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "NavpointRecord | undefined")]
     pub fn resolve_fix(&self, code: String) -> Result<JsValue, JsValue> {
         let key = code.to_uppercase();
         let item = self
@@ -817,6 +828,7 @@ impl EurocontrolResolver {
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "NavpointRecord | undefined")]
     pub fn resolve_navaid(&self, code: String) -> Result<JsValue, JsValue> {
         let key = code.to_uppercase();
         let item = self
@@ -828,6 +840,7 @@ impl EurocontrolResolver {
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirwayRecord | undefined")]
     pub fn resolve_airway(&self, name: String) -> Result<JsValue, JsValue> {
         let key = normalize_airway_name(&name);
         let item = self
@@ -839,16 +852,19 @@ impl EurocontrolResolver {
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirwayRecord | undefined")]
     pub fn resolve_sid(&self, name: String) -> Result<JsValue, JsValue> {
         let item = self.resolve_procedure_airway_by_kind("SID", &name);
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirwayRecord | undefined")]
     pub fn resolve_star(&self, name: String) -> Result<JsValue, JsValue> {
         let item = self.resolve_procedure_airway_by_kind("STAR", &name);
         serde_wasm_bindgen::to_value(&item).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    #[wasm_bindgen(unchecked_return_type = "AirspaceCompositeRecord | undefined")]
     pub fn resolve_airspace(&self, designator: String) -> Result<JsValue, JsValue> {
         let key = designator.to_uppercase();
         let records = self
@@ -869,7 +885,7 @@ impl EurocontrolResolver {
     /// Points are resolved against the resolver's navaid/airport indices. Airways are expanded
     /// to their constituent waypoints. Direct (DCT) segments connect the previous resolved point
     /// to the next one. SID/STAR designators are not expanded (no procedure leg data available).
-    #[wasm_bindgen(js_name = enrichRoute)]
+    #[wasm_bindgen(js_name = enrichRoute, unchecked_return_type = "RouteSegment[]")]
     pub fn enrich_route(&self, route: String) -> Result<JsValue, JsValue> {
         use crate::field15::ResolvedPoint as WasmPoint;
         use crate::field15::RouteSegment;
