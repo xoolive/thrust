@@ -79,7 +79,7 @@ pub fn parse_airspace_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String
         if file.name().ends_with(".BASELINE") {
             let mut reader = Reader::from_reader(BufReader::new(file));
 
-            while let Ok(_node) = find_node(&mut reader, vec![QName(b"aixm:Airspace")], None) {
+            while let Ok(_node) = find_node(&mut reader, vec![QName("aixm:Airspace")], None) {
                 let airspace = parse_airspace(&mut reader)?;
                 airspaces.insert(airspace.identifier.clone(), airspace);
             }
@@ -95,29 +95,29 @@ fn parse_airspace<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Airspac
     while let Ok(node) = find_node(
         reader,
         vec![
-            QName(b"gml:identifier"),
-            QName(b"aixm:designator"),
-            QName(b"aixm:type"),
-            QName(b"aixm:name"),
-            QName(b"aixm:AirspaceVolume"),
+            QName("gml:identifier"),
+            QName("aixm:designator"),
+            QName("aixm:type"),
+            QName("aixm:name"),
+            QName("aixm:AirspaceVolume"),
         ],
-        Some(QName(b"aixm:Airspace")),
+        Some(QName("aixm:Airspace")),
     ) {
         let Node { name, .. } = node;
         match name {
-            QName(b"gml:identifier") => {
+            QName("gml:identifier") => {
                 airspace.identifier = read_text(reader, name)?;
             }
-            QName(b"aixm:designator") => {
+            QName("aixm:designator") => {
                 airspace.designator = Some(read_text(reader, name)?);
             }
-            QName(b"aixm:type") => {
+            QName("aixm:type") => {
                 airspace.type_ = Some(read_text(reader, name)?);
             }
-            QName(b"aixm:name") => {
+            QName("aixm:name") => {
                 airspace.name = Some(read_text(reader, name)?);
             }
-            QName(b"aixm:AirspaceVolume") => {
+            QName("aixm:AirspaceVolume") => {
                 let volume = parse_airspace_volume(reader)?;
                 airspace.volumes.push(volume);
             }
@@ -134,38 +134,38 @@ fn parse_airspace_volume<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<
     while let Ok(node) = find_node(
         reader,
         vec![
-            QName(b"aixm:upperLimit"),
-            QName(b"aixm:upperLimitReference"),
-            QName(b"aixm:lowerLimit"),
-            QName(b"aixm:lowerLimitReference"),
-            QName(b"gml:pos"),
-            QName(b"gml:pointProperty"),
-            QName(b"aixm:theAirspace"),
+            QName("aixm:upperLimit"),
+            QName("aixm:upperLimitReference"),
+            QName("aixm:lowerLimit"),
+            QName("aixm:lowerLimitReference"),
+            QName("gml:pos"),
+            QName("gml:pointProperty"),
+            QName("aixm:theAirspace"),
         ],
-        Some(QName(b"aixm:AirspaceVolume")),
+        Some(QName("aixm:AirspaceVolume")),
     ) {
         let Node { name, attributes } = node;
         match name {
-            QName(b"aixm:upperLimit") => {
+            QName("aixm:upperLimit") => {
                 volume.upper_limit = Some(read_text(reader, name)?);
             }
-            QName(b"aixm:upperLimitReference") => {
+            QName("aixm:upperLimitReference") => {
                 volume.upper_limit_reference = Some(read_text(reader, name)?);
             }
-            QName(b"aixm:lowerLimit") => {
+            QName("aixm:lowerLimit") => {
                 volume.lower_limit = Some(read_text(reader, name)?);
             }
-            QName(b"aixm:lowerLimitReference") => {
+            QName("aixm:lowerLimitReference") => {
                 volume.lower_limit_reference = Some(read_text(reader, name)?);
             }
-            QName(b"gml:pos") => {
+            QName("gml:pos") => {
                 let text = read_text(reader, name)?;
                 let mut numbers = text.split_whitespace().filter_map(|x| x.parse::<f64>().ok());
                 if let (Some(lat), Some(lon)) = (numbers.next(), numbers.next()) {
                     volume.polygon.push((lat, lon));
                 }
             }
-            QName(b"gml:pointProperty") => {
+            QName("gml:pointProperty") => {
                 if let Some(id) = attributes
                     .get("xlink:href")
                     .map(|s| s.strip_prefix("urn:uuid:").unwrap_or(s).to_string())
@@ -173,7 +173,7 @@ fn parse_airspace_volume<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<
                     volume.point_refs.push(id);
                 }
             }
-            QName(b"aixm:theAirspace") => {
+            QName("aixm:theAirspace") => {
                 volume.component_airspace = attributes
                     .get("xlink:href")
                     .map(|s| s.strip_prefix("urn:uuid:").unwrap_or(s).to_string());

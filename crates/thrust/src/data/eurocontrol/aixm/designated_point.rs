@@ -63,7 +63,7 @@ pub fn parse_designated_point_zip_file<P: AsRef<Path>>(
         if file.name().ends_with(".BASELINE") {
             let mut reader = Reader::from_reader(BufReader::new(file));
 
-            while let Ok(_nome) = find_node(&mut reader, vec![QName(b"aixm:DesignatedPoint")], None) {
+            while let Ok(_nome) = find_node(&mut reader, vec![QName("aixm:DesignatedPoint")], None) {
                 let point = parse_designated_point(&mut reader)?;
                 points.insert(point.identifier.clone(), point);
             }
@@ -79,30 +79,30 @@ fn parse_designated_point<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result
     while let Ok(node) = find_node(
         reader,
         vec![
-            QName(b"gml:identifier"),
-            QName(b"aixm:name"),
-            QName(b"aixm:designator"),
-            QName(b"aixm:type"),
-            QName(b"aixm:Point"),
+            QName("gml:identifier"),
+            QName("aixm:name"),
+            QName("aixm:designator"),
+            QName("aixm:type"),
+            QName("aixm:Point"),
         ],
-        Some(QName(b"aixm:DesignatedPoint")),
+        Some(QName("aixm:DesignatedPoint")),
     ) {
         let Node { name, .. } = node;
         match name {
-            QName(b"gml:identifier") => {
+            QName("gml:identifier") => {
                 point.identifier = read_text(reader, name)?;
             }
-            QName(b"aixm:name") => {
+            QName("aixm:name") => {
                 point.name = Some(read_text(reader, name)?);
             }
-            QName(b"aixm:designator") => {
+            QName("aixm:designator") => {
                 point.designator = read_text(reader, name)?;
             }
-            QName(b"aixm:type") => {
+            QName("aixm:type") => {
                 point.r#type = read_text(reader, name)?;
             }
-            QName(b"aixm:Point") => {
-                while let Ok(node) = find_node(reader, vec![QName(b"gml:pos")], Some(name)) {
+            QName("aixm:Point") => {
+                while let Ok(node) = find_node(reader, vec![QName("gml:pos")], Some(name)) {
                     let Node { name, .. } = node;
                     let coords: Vec<f64> = read_text(reader, name)?
                         .split_whitespace()

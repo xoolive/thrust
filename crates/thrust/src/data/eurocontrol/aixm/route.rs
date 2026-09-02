@@ -56,7 +56,7 @@ pub fn parse_route_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, R
         if file.name().ends_with(".BASELINE") {
             let mut reader = Reader::from_reader(BufReader::new(file));
 
-            while let Ok(_node) = find_node(&mut reader, vec![QName(b"aixm:Route")], None) {
+            while let Ok(_node) = find_node(&mut reader, vec![QName("aixm:Route")], None) {
                 let route = parse_route(&mut reader)?;
                 routes.insert(route.identifier.clone(), route);
             }
@@ -72,29 +72,29 @@ fn parse_route<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Route, Thr
     while let Ok(node) = find_node(
         reader,
         vec![
-            QName(b"gml:identifier"),
-            QName(b"aixm:designatorPrefix"),
-            QName(b"aixm:designatorSecondLetter"),
-            QName(b"aixm:designatorNumber"),
-            QName(b"aixm:multipleIdentifier"),
+            QName("gml:identifier"),
+            QName("aixm:designatorPrefix"),
+            QName("aixm:designatorSecondLetter"),
+            QName("aixm:designatorNumber"),
+            QName("aixm:multipleIdentifier"),
         ],
-        Some(QName(b"aixm:Route")),
+        Some(QName("aixm:Route")),
     ) {
         let Node { name, .. } = node;
         match name {
-            QName(b"gml:identifier") => {
+            QName("gml:identifier") => {
                 route.identifier = read_text(reader, name)?;
             }
-            QName(b"aixm:designatorPrefix") => {
+            QName("aixm:designatorPrefix") => {
                 route.prefix = Some(read_text(reader, name)?);
             }
-            QName(b"aixm:designatorSecondLetter") => {
+            QName("aixm:designatorSecondLetter") => {
                 route.second_letter = Some(read_text(reader, name)?);
             }
-            QName(b"aixm:designatorNumber") => {
+            QName("aixm:designatorNumber") => {
                 route.number = Some(read_text(reader, name)?);
             }
-            QName(b"aixm:multipleIdentifier") => {
+            QName("aixm:multipleIdentifier") => {
                 route.multiple_identifier = Some(read_text(reader, name)?);
             }
             _ => (),
