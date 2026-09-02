@@ -743,22 +743,22 @@ fn open_csv_bundle<P: AsRef<Path>>(path: P) -> Result<ZipArchive<Cursor<Vec<u8>>
 }
 
 fn parse_saa_xml_airspaces(xml: &[u8]) -> Vec<NasrAirspace> {
-    fn tag_is(tag: &[u8], suffix: &[u8]) -> bool {
+    fn tag_is(tag: &str, suffix: &str) -> bool {
         tag.ends_with(suffix)
     }
 
-    fn read_text(reader: &mut Reader<Cursor<&[u8]>>, end: Vec<u8>) -> Option<String> {
+    fn read_text(reader: &mut Reader<Cursor<&[u8]>>, end: String) -> Option<String> {
         let mut out = String::new();
         let mut buf = Vec::new();
         loop {
             match reader.read_event_into(&mut buf) {
                 Ok(Event::Text(t)) => {
-                    out.push_str(&String::from_utf8_lossy(t.as_ref()));
+                    out.push_str(t.as_ref());
                 }
                 Ok(Event::CData(t)) => {
-                    out.push_str(&String::from_utf8_lossy(t.as_ref()));
+                    out.push_str(t.as_ref());
                 }
-                Ok(Event::End(e)) if e.name().as_ref() == end.as_slice() => break,
+                Ok(Event::End(e)) if e.name().as_ref() == end.as_str() => break,
                 Ok(Event::Eof) | Err(_) => break,
                 _ => {}
             }
@@ -788,8 +788,8 @@ fn parse_saa_xml_airspaces(xml: &[u8]) -> Vec<NasrAirspace> {
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
-                let tag = e.name().as_ref().to_vec();
-                if tag_is(tag.as_slice(), b"Airspace") {
+                let tag = e.name().as_ref().to_string();
+                if tag_is(tag.as_str(), "Airspace") {
                     in_airspace = true;
                     designator = None;
                     name = None;
@@ -797,17 +797,17 @@ fn parse_saa_xml_airspaces(xml: &[u8]) -> Vec<NasrAirspace> {
                     lower = None;
                     upper = None;
                     coords.clear();
-                } else if in_airspace && tag_is(tag.as_slice(), b"designator") {
+                } else if in_airspace && tag_is(tag.as_str(), "designator") {
                     designator = read_text(&mut reader, tag);
-                } else if in_airspace && tag_is(tag.as_slice(), b"name") {
+                } else if in_airspace && tag_is(tag.as_str(), "name") {
                     name = read_text(&mut reader, tag);
-                } else if in_airspace && tag_is(tag.as_slice(), b"type") {
+                } else if in_airspace && tag_is(tag.as_str(), "type") {
                     type_ = read_text(&mut reader, tag);
-                } else if in_airspace && tag_is(tag.as_slice(), b"lowerLimit") {
+                } else if in_airspace && tag_is(tag.as_str(), "lowerLimit") {
                     lower = read_text(&mut reader, tag).and_then(|v| v.parse::<f64>().ok());
-                } else if in_airspace && tag_is(tag.as_slice(), b"upperLimit") {
+                } else if in_airspace && tag_is(tag.as_str(), "upperLimit") {
                     upper = read_text(&mut reader, tag).and_then(|v| v.parse::<f64>().ok());
-                } else if in_airspace && tag_is(tag.as_slice(), b"pos") {
+                } else if in_airspace && tag_is(tag.as_str(), "pos") {
                     if let Some(text) = read_text(&mut reader, tag) {
                         let mut it = text.split_whitespace().filter_map(|x| x.parse::<f64>().ok());
                         if let (Some(lat), Some(lon)) = (it.next(), it.next()) {
@@ -816,7 +816,7 @@ fn parse_saa_xml_airspaces(xml: &[u8]) -> Vec<NasrAirspace> {
                     }
                 }
             }
-            Ok(Event::End(e)) if tag_is(e.name().as_ref(), b"Airspace") && in_airspace => {
+            Ok(Event::End(e)) if tag_is(e.name().as_ref(), "Airspace") && in_airspace => {
                 let key = designator.clone().or_else(|| name.clone());
                 if let Some(des) = key {
                     if coords.len() >= 3 {

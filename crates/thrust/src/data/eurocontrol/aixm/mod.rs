@@ -45,7 +45,7 @@ fn find_node<'a, R: std::io::BufRead>(
 
                         for attr in e.attributes().with_checks(false) {
                             let attr = attr?;
-                            let key = std::str::from_utf8(attr.key.0)?;
+                            let key = attr.key.0;
                             attributes.insert(
                                 key.to_string(),
                                 attr.normalized_value(XmlVersion::Implicit1_0)?.to_string(),
@@ -63,7 +63,7 @@ fn find_node<'a, R: std::io::BufRead>(
 
                         for attr in e.attributes().with_checks(false) {
                             let attr = attr?;
-                            let key = std::str::from_utf8(attr.key.0)?;
+                            let key = attr.key.0;
                             attributes.insert(
                                 key.to_string(),
                                 attr.normalized_value(XmlVersion::Implicit1_0)?.to_string(),
@@ -96,9 +96,7 @@ fn read_text<R: std::io::BufRead>(reader: &mut Reader<R>, end: QName) -> Result<
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Text(e)) => {
-                let decoded = e
-                    .decode()
-                    .map_err(|_| ThrustError::ParseError("Invalid XML encoding".to_string()))?;
+                let decoded = e.xml_content(XmlVersion::Implicit1_0);
                 text.push_str(&decoded);
             }
             Ok(Event::End(e)) if e.name() == end => break,

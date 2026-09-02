@@ -107,7 +107,7 @@ pub fn parse_route_segment_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<S
         if file.name().ends_with(".BASELINE") {
             let mut reader = Reader::from_reader(BufReader::new(file));
 
-            while let Ok(_node) = find_node(&mut reader, vec![QName(b"aixm:RouteSegment")], None) {
+            while let Ok(_node) = find_node(&mut reader, vec![QName("aixm:RouteSegment")], None) {
                 let route_segment = parse_route_segment(&mut reader)?;
                 route_segments.insert(route_segment.identifier.clone(), route_segment);
             }
@@ -123,29 +123,29 @@ fn parse_route_segment<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Ro
     while let Ok(node) = find_node(
         reader,
         vec![
-            QName(b"gml:identifier"),
-            QName(b"aixm:routeFormed"),
-            QName(b"aixm:start"),
-            QName(b"aixm:end"),
-            //QName(b"aixm:lowerLimit"),
-            //QName(b"aixm:upperLimit"),
-            //QName(b"aixm:direction"),
-            QName(b"aixm:extension"),
-            QName(b"aixm:annotation"),
-            QName(b"aixm:availability"),
+            QName("gml:identifier"),
+            QName("aixm:routeFormed"),
+            QName("aixm:start"),
+            QName("aixm:end"),
+            //QName("aixm:lowerLimit"),
+            //QName("aixm:upperLimit"),
+            //QName("aixm:direction"),
+            QName("aixm:extension"),
+            QName("aixm:annotation"),
+            QName("aixm:availability"),
         ],
-        Some(QName(b"aixm:RouteSegment")),
+        Some(QName("aixm:RouteSegment")),
     ) {
         let Node { name, attributes } = node;
         match name {
-            QName(b"gml:identifier") => {
+            QName("gml:identifier") => {
                 segment.identifier = read_text(reader, name)?;
             }
-            QName(b"aixm:extension") | QName(b"aixm:availability") | QName(b"aixm_annotation") => {
+            QName("aixm:extension") | QName("aixm:availability") | QName("aixm_annotation") => {
                 // Skip the whole block
                 let _ = find_node(reader, vec![], Some(name));
             }
-            QName(b"aixm:routeFormed") => {
+            QName("aixm:routeFormed") => {
                 if let Some(id) = attributes
                     .get("xlink:href")
                     .map(|s| s.strip_prefix("urn:uuid:").unwrap_or(s))
@@ -153,27 +153,27 @@ fn parse_route_segment<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Ro
                     segment.route_formed = Some(id.to_string());
                 }
             }
-            /*QName(b"aixm:lowerLimit") => {
+            /*QName("aixm:lowerLimit") => {
                 segment.lower_limit = Some(read_text(reader, node)?);
             }
-            QName(b"aixm:upperLimit") => {
+            QName("aixm:upperLimit") => {
                 segment.upper_limit = Some(read_text(reader, node)?);
             }
-            QName(b"aixm:direction") => {
+            QName("aixm:direction") => {
                 segment.direction = Some(read_text(reader, node)?);
             }*/
-            QName(b"aixm:start") => {
+            QName("aixm:start") => {
                 while let Ok(node) = find_node(
                     reader,
                     vec![
-                        QName(b"aixm:pointChoice_fixDesignatedPoint"),
-                        QName(b"aixm:pointChoice_navaidSystem"),
+                        QName("aixm:pointChoice_fixDesignatedPoint"),
+                        QName("aixm:pointChoice_navaidSystem"),
                     ],
                     Some(name),
                 ) {
                     let Node { name, attributes } = node;
                     match name {
-                        QName(b"aixm:pointChoice_fixDesignatedPoint") => {
+                        QName("aixm:pointChoice_fixDesignatedPoint") => {
                             if let Some(id) = attributes
                                 .get("xlink:href")
                                 .map(|s| s.strip_prefix("urn:uuid:").unwrap_or(s))
@@ -181,7 +181,7 @@ fn parse_route_segment<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Ro
                                 segment.start = PointReference::DesignatedPoint(id.to_string());
                             }
                         }
-                        QName(b"aixm:pointChoice_navaidSystem") => {
+                        QName("aixm:pointChoice_navaidSystem") => {
                             if let Some(id) = attributes
                                 .get("xlink:href")
                                 .map(|s| s.strip_prefix("urn:uuid:").unwrap_or(s))
@@ -193,18 +193,18 @@ fn parse_route_segment<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Ro
                     }
                 }
             }
-            QName(b"aixm:end") => {
+            QName("aixm:end") => {
                 while let Ok(node) = find_node(
                     reader,
                     vec![
-                        QName(b"aixm:pointChoice_fixDesignatedPoint"),
-                        QName(b"aixm:pointChoice_navaidSystem"),
+                        QName("aixm:pointChoice_fixDesignatedPoint"),
+                        QName("aixm:pointChoice_navaidSystem"),
                     ],
                     Some(name),
                 ) {
                     let Node { name, attributes } = node;
                     match name {
-                        QName(b"aixm:pointChoice_fixDesignatedPoint") => {
+                        QName("aixm:pointChoice_fixDesignatedPoint") => {
                             if let Some(id) = attributes
                                 .get("xlink:href")
                                 .map(|s| s.strip_prefix("urn:uuid:").unwrap_or(s))
@@ -212,7 +212,7 @@ fn parse_route_segment<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Ro
                                 segment.end = PointReference::DesignatedPoint(id.to_string());
                             }
                         }
-                        QName(b"aixm:pointChoice_navaidSystem") => {
+                        QName("aixm:pointChoice_navaidSystem") => {
                             if let Some(id) = attributes
                                 .get("xlink:href")
                                 .map(|s| s.strip_prefix("urn:uuid:").unwrap_or(s))

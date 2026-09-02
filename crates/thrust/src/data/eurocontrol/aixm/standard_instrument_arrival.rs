@@ -61,7 +61,7 @@ pub fn parse_standard_instrument_arrival_zip_file<P: AsRef<Path>>(
         if file.name().ends_with(".BASELINE") {
             let mut reader = Reader::from_reader(BufReader::new(file));
 
-            while let Ok(_node) = find_node(&mut reader, vec![QName(b"aixm:StandardInstrumentArrival")], None) {
+            while let Ok(_node) = find_node(&mut reader, vec![QName("aixm:StandardInstrumentArrival")], None) {
                 let arrival = parse_standard_instrument_arrival(&mut reader)?;
                 arrivals.insert(arrival.identifier.clone(), arrival);
             }
@@ -79,33 +79,33 @@ fn parse_standard_instrument_arrival<R: std::io::BufRead>(
     while let Ok(node) = find_node(
         reader,
         vec![
-            QName(b"gml:identifier"),
-            QName(b"aixm:airportHeliport"),
-            QName(b"aixm:designator"),
-            QName(b"aixm:instruction"),
-            QName(b"aixm:extension"),
+            QName("gml:identifier"),
+            QName("aixm:airportHeliport"),
+            QName("aixm:designator"),
+            QName("aixm:instruction"),
+            QName("aixm:extension"),
         ],
-        Some(QName(b"aixm:StandardInstrumentArrival")),
+        Some(QName("aixm:StandardInstrumentArrival")),
     ) {
         let Node { name, attributes } = node;
         match name {
-            QName(b"gml:identifier") => {
+            QName("gml:identifier") => {
                 arrival.identifier = read_text(reader, name)?;
             }
-            QName(b"aixm:airportHeliport") => {
+            QName("aixm:airportHeliport") => {
                 arrival.airport_heliport = extract_uuid_href(&attributes);
             }
-            QName(b"aixm:designator") => {
+            QName("aixm:designator") => {
                 arrival.designator = read_text(reader, name)?;
             }
-            QName(b"aixm:instruction") => {
+            QName("aixm:instruction") => {
                 arrival.instruction = Some(read_text(reader, name)?);
             }
-            QName(b"aixm:extension") => {
+            QName("aixm:extension") => {
                 while let Ok(node) = find_node(
                     reader,
-                    vec![QName(b"adrext:connectingPoint")],
-                    Some(QName(b"aixm:extension")),
+                    vec![QName("adrext:connectingPoint")],
+                    Some(QName("aixm:extension")),
                 ) {
                     if let Some(point) = parse_connecting_point(reader, node.name)? {
                         arrival.connecting_points.push(point);
@@ -123,20 +123,20 @@ fn parse_connecting_point<R: std::io::BufRead>(
     reader: &mut Reader<R>,
     end: QName,
 ) -> Result<Option<PointReference>, ThrustError> {
-    while let Ok(node) = find_node(reader, vec![QName(b"aixm:TerminalSegmentPoint")], Some(end)) {
+    while let Ok(node) = find_node(reader, vec![QName("aixm:TerminalSegmentPoint")], Some(end)) {
         while let Ok(node) = find_node(
             reader,
             vec![
-                QName(b"aixm:pointChoice_fixDesignatedPoint"),
-                QName(b"aixm:pointChoice_navaidSystem"),
+                QName("aixm:pointChoice_fixDesignatedPoint"),
+                QName("aixm:pointChoice_navaidSystem"),
             ],
             Some(node.name),
         ) {
             let Node { name, attributes } = node;
             if let Some(id) = extract_uuid_href(&attributes) {
                 return Ok(Some(match name {
-                    QName(b"aixm:pointChoice_fixDesignatedPoint") => PointReference::DesignatedPoint(id),
-                    QName(b"aixm:pointChoice_navaidSystem") => PointReference::Navaid(id),
+                    QName("aixm:pointChoice_fixDesignatedPoint") => PointReference::DesignatedPoint(id),
+                    QName("aixm:pointChoice_navaidSystem") => PointReference::Navaid(id),
                     _ => PointReference::None,
                 }));
             }

@@ -51,7 +51,7 @@ pub fn parse_arrival_leg_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<Str
         if file.name().ends_with(".BASELINE") {
             let mut reader = Reader::from_reader(BufReader::new(file));
 
-            while let Ok(_node) = find_node(&mut reader, vec![QName(b"aixm:ArrivalLeg")], None) {
+            while let Ok(_node) = find_node(&mut reader, vec![QName("aixm:ArrivalLeg")], None) {
                 let leg = parse_arrival_leg(&mut reader)?;
                 legs.insert(leg.identifier.clone(), leg);
             }
@@ -67,25 +67,25 @@ fn parse_arrival_leg<R: std::io::BufRead>(reader: &mut Reader<R>) -> Result<Arri
     while let Ok(node) = find_node(
         reader,
         vec![
-            QName(b"gml:identifier"),
-            QName(b"aixm:startPoint"),
-            QName(b"aixm:endPoint"),
-            QName(b"aixm:arrival"),
+            QName("gml:identifier"),
+            QName("aixm:startPoint"),
+            QName("aixm:endPoint"),
+            QName("aixm:arrival"),
         ],
-        Some(QName(b"aixm:ArrivalLeg")),
+        Some(QName("aixm:ArrivalLeg")),
     ) {
         let Node { name, attributes } = node;
         match name {
-            QName(b"gml:identifier") => {
+            QName("gml:identifier") => {
                 leg.identifier = read_text(reader, name)?;
             }
-            QName(b"aixm:startPoint") => {
+            QName("aixm:startPoint") => {
                 leg.start = parse_terminal_segment_point(reader, name)?;
             }
-            QName(b"aixm:endPoint") => {
+            QName("aixm:endPoint") => {
                 leg.end = parse_terminal_segment_point(reader, name)?;
             }
-            QName(b"aixm:arrival") => {
+            QName("aixm:arrival") => {
                 leg.arrival = attributes
                     .get("xlink:href")
                     .map(|s| s.strip_prefix("urn:uuid:").unwrap_or(s).to_string());
@@ -101,13 +101,13 @@ fn parse_terminal_segment_point<R: std::io::BufRead>(
     reader: &mut Reader<R>,
     end: QName,
 ) -> Result<PointReference, ThrustError> {
-    while let Ok(node) = find_node(reader, vec![QName(b"aixm:TerminalSegmentPoint")], Some(end)) {
+    while let Ok(node) = find_node(reader, vec![QName("aixm:TerminalSegmentPoint")], Some(end)) {
         while let Ok(node) = find_node(
             reader,
             vec![
-                QName(b"aixm:pointChoice_fixDesignatedPoint"),
-                QName(b"aixm:pointChoice_navaidSystem"),
-                QName(b"aixm:pointChoice_airportReferencePoint"),
+                QName("aixm:pointChoice_fixDesignatedPoint"),
+                QName("aixm:pointChoice_navaidSystem"),
+                QName("aixm:pointChoice_airportReferencePoint"),
             ],
             Some(node.name),
         ) {
@@ -117,9 +117,9 @@ fn parse_terminal_segment_point<R: std::io::BufRead>(
                 .map(|s| s.strip_prefix("urn:uuid:").unwrap_or(s).to_string())
             {
                 return Ok(match name {
-                    QName(b"aixm:pointChoice_fixDesignatedPoint") => PointReference::DesignatedPoint(id),
-                    QName(b"aixm:pointChoice_navaidSystem") => PointReference::Navaid(id),
-                    QName(b"aixm:pointChoice_airportReferencePoint") => PointReference::AirportHeliport(id),
+                    QName("aixm:pointChoice_fixDesignatedPoint") => PointReference::DesignatedPoint(id),
+                    QName("aixm:pointChoice_navaidSystem") => PointReference::Navaid(id),
+                    QName("aixm:pointChoice_airportReferencePoint") => PointReference::AirportHeliport(id),
                     _ => PointReference::None,
                 });
             }

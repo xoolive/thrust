@@ -155,7 +155,7 @@ fn parse_aixm_airports(zip_bytes: &[u8]) -> Result<Vec<AirportRecord>, ThrustErr
     let mut out = Vec::new();
     for xml in read_baseline_xml_documents(zip_bytes)? {
         let mut reader = Reader::from_reader(BufReader::new(Cursor::new(xml.into_bytes())));
-        while find_node(&mut reader, vec![QName(b"aixm:AirportHeliport")], None).is_ok() {
+        while find_node(&mut reader, vec![QName("aixm:AirportHeliport")], None).is_ok() {
             let mut icao = String::new();
             let mut iata = None;
             let mut name = String::new();
@@ -164,20 +164,20 @@ fn parse_aixm_airports(zip_bytes: &[u8]) -> Result<Vec<AirportRecord>, ThrustErr
             while let Ok(node) = find_node(
                 &mut reader,
                 vec![
-                    QName(b"aixm:locationIndicatorICAO"),
-                    QName(b"aixm:designatorIATA"),
-                    QName(b"aixm:name"),
-                    QName(b"aixm:ElevatedPoint"),
+                    QName("aixm:locationIndicatorICAO"),
+                    QName("aixm:designatorIATA"),
+                    QName("aixm:name"),
+                    QName("aixm:ElevatedPoint"),
                 ],
-                Some(QName(b"aixm:AirportHeliport")),
+                Some(QName("aixm:AirportHeliport")),
             ) {
                 match node.name {
-                    QName(b"aixm:locationIndicatorICAO") => icao = read_text(&mut reader, node.name)?,
-                    QName(b"aixm:designatorIATA") => iata = Some(read_text(&mut reader, node.name)?),
-                    QName(b"aixm:name") => name = read_text(&mut reader, node.name)?,
-                    QName(b"aixm:ElevatedPoint") => {
+                    QName("aixm:locationIndicatorICAO") => icao = read_text(&mut reader, node.name)?,
+                    QName("aixm:designatorIATA") => iata = Some(read_text(&mut reader, node.name)?),
+                    QName("aixm:name") => name = read_text(&mut reader, node.name)?,
+                    QName("aixm:ElevatedPoint") => {
                         while let Ok(pos) =
-                            find_node(&mut reader, vec![QName(b"gml:pos")], Some(QName(b"aixm:ElevatedPoint")))
+                            find_node(&mut reader, vec![QName("gml:pos")], Some(QName("aixm:ElevatedPoint")))
                         {
                             let coords: Vec<f64> = read_text(&mut reader, pos.name)?
                                 .split_whitespace()
@@ -228,7 +228,7 @@ fn parse_aixm_designated_points(zip_bytes: &[u8]) -> Result<NavpointsWithRefInde
     let mut by_id: HashMap<String, AirwayPointRecord> = HashMap::new();
     for xml in read_baseline_xml_documents(zip_bytes)? {
         let mut reader = Reader::from_reader(BufReader::new(Cursor::new(xml.into_bytes())));
-        while find_node(&mut reader, vec![QName(b"aixm:DesignatedPoint")], None).is_ok() {
+        while find_node(&mut reader, vec![QName("aixm:DesignatedPoint")], None).is_ok() {
             let mut identifier = String::new();
             let mut designator = String::new();
             let mut name = None;
@@ -238,21 +238,21 @@ fn parse_aixm_designated_points(zip_bytes: &[u8]) -> Result<NavpointsWithRefInde
             while let Ok(node) = find_node(
                 &mut reader,
                 vec![
-                    QName(b"gml:identifier"),
-                    QName(b"aixm:name"),
-                    QName(b"aixm:designator"),
-                    QName(b"aixm:type"),
-                    QName(b"aixm:Point"),
+                    QName("gml:identifier"),
+                    QName("aixm:name"),
+                    QName("aixm:designator"),
+                    QName("aixm:type"),
+                    QName("aixm:Point"),
                 ],
-                Some(QName(b"aixm:DesignatedPoint")),
+                Some(QName("aixm:DesignatedPoint")),
             ) {
                 match node.name {
-                    QName(b"gml:identifier") => identifier = read_text(&mut reader, node.name)?,
-                    QName(b"aixm:name") => name = Some(read_text(&mut reader, node.name)?),
-                    QName(b"aixm:designator") => designator = read_text(&mut reader, node.name)?,
-                    QName(b"aixm:type") => point_type = Some(read_text(&mut reader, node.name)?),
-                    QName(b"aixm:Point") => {
-                        while let Ok(pos) = find_node(&mut reader, vec![QName(b"gml:pos")], Some(node.name)) {
+                    QName("gml:identifier") => identifier = read_text(&mut reader, node.name)?,
+                    QName("aixm:name") => name = Some(read_text(&mut reader, node.name)?),
+                    QName("aixm:designator") => designator = read_text(&mut reader, node.name)?,
+                    QName("aixm:type") => point_type = Some(read_text(&mut reader, node.name)?),
+                    QName("aixm:Point") => {
+                        while let Ok(pos) = find_node(&mut reader, vec![QName("gml:pos")], Some(node.name)) {
                             let coords: Vec<f64> = read_text(&mut reader, pos.name)?
                                 .split_whitespace()
                                 .filter_map(|s| s.parse::<f64>().ok())
@@ -305,7 +305,7 @@ fn parse_aixm_navaids(zip_bytes: &[u8]) -> Result<NavpointsWithRefIndex, ThrustE
     let mut by_id: HashMap<String, AirwayPointRecord> = HashMap::new();
     for xml in read_baseline_xml_documents(zip_bytes)? {
         let mut reader = Reader::from_reader(BufReader::new(Cursor::new(xml.into_bytes())));
-        while find_node(&mut reader, vec![QName(b"aixm:Navaid")], None).is_ok() {
+        while find_node(&mut reader, vec![QName("aixm:Navaid")], None).is_ok() {
             let mut identifier = String::new();
             let mut designator = None;
             let mut description = None;
@@ -315,21 +315,21 @@ fn parse_aixm_navaids(zip_bytes: &[u8]) -> Result<NavpointsWithRefIndex, ThrustE
             while let Ok(node) = find_node(
                 &mut reader,
                 vec![
-                    QName(b"gml:identifier"),
-                    QName(b"aixm:designator"),
-                    QName(b"aixm:type"),
-                    QName(b"aixm:name"),
-                    QName(b"aixm:ElevatedPoint"),
+                    QName("gml:identifier"),
+                    QName("aixm:designator"),
+                    QName("aixm:type"),
+                    QName("aixm:name"),
+                    QName("aixm:ElevatedPoint"),
                 ],
-                Some(QName(b"aixm:Navaid")),
+                Some(QName("aixm:Navaid")),
             ) {
                 match node.name {
-                    QName(b"gml:identifier") => identifier = read_text(&mut reader, node.name)?,
-                    QName(b"aixm:designator") => designator = Some(read_text(&mut reader, node.name)?),
-                    QName(b"aixm:type") => point_type = Some(read_text(&mut reader, node.name)?),
-                    QName(b"aixm:name") => description = Some(read_text(&mut reader, node.name)?),
-                    QName(b"aixm:ElevatedPoint") => {
-                        while let Ok(pos) = find_node(&mut reader, vec![QName(b"gml:pos")], Some(node.name)) {
+                    QName("gml:identifier") => identifier = read_text(&mut reader, node.name)?,
+                    QName("aixm:designator") => designator = Some(read_text(&mut reader, node.name)?),
+                    QName("aixm:type") => point_type = Some(read_text(&mut reader, node.name)?),
+                    QName("aixm:name") => description = Some(read_text(&mut reader, node.name)?),
+                    QName("aixm:ElevatedPoint") => {
+                        while let Ok(pos) = find_node(&mut reader, vec![QName("gml:pos")], Some(node.name)) {
                             let coords: Vec<f64> = read_text(&mut reader, pos.name)?
                                 .split_whitespace()
                                 .filter_map(|s| s.parse::<f64>().ok())
@@ -385,7 +385,7 @@ fn parse_aixm_airways(
     let mut route_name_by_id: HashMap<String, String> = HashMap::new();
     for xml in read_baseline_xml_documents(route_zip_bytes)? {
         let mut reader = Reader::from_reader(BufReader::new(Cursor::new(xml.into_bytes())));
-        while find_node(&mut reader, vec![QName(b"aixm:Route")], None).is_ok() {
+        while find_node(&mut reader, vec![QName("aixm:Route")], None).is_ok() {
             let mut identifier = String::new();
             let mut prefix = String::new();
             let mut second = String::new();
@@ -394,20 +394,20 @@ fn parse_aixm_airways(
             while let Ok(node) = find_node(
                 &mut reader,
                 vec![
-                    QName(b"gml:identifier"),
-                    QName(b"aixm:designatorPrefix"),
-                    QName(b"aixm:designatorSecondLetter"),
-                    QName(b"aixm:designatorNumber"),
-                    QName(b"aixm:multipleIdentifier"),
+                    QName("gml:identifier"),
+                    QName("aixm:designatorPrefix"),
+                    QName("aixm:designatorSecondLetter"),
+                    QName("aixm:designatorNumber"),
+                    QName("aixm:multipleIdentifier"),
                 ],
-                Some(QName(b"aixm:Route")),
+                Some(QName("aixm:Route")),
             ) {
                 match node.name {
-                    QName(b"gml:identifier") => identifier = read_text(&mut reader, node.name)?,
-                    QName(b"aixm:designatorPrefix") => prefix = read_text(&mut reader, node.name)?,
-                    QName(b"aixm:designatorSecondLetter") => second = read_text(&mut reader, node.name)?,
-                    QName(b"aixm:designatorNumber") => number = read_text(&mut reader, node.name)?,
-                    QName(b"aixm:multipleIdentifier") => multiple = read_text(&mut reader, node.name)?,
+                    QName("gml:identifier") => identifier = read_text(&mut reader, node.name)?,
+                    QName("aixm:designatorPrefix") => prefix = read_text(&mut reader, node.name)?,
+                    QName("aixm:designatorSecondLetter") => second = read_text(&mut reader, node.name)?,
+                    QName("aixm:designatorNumber") => number = read_text(&mut reader, node.name)?,
+                    QName("aixm:multipleIdentifier") => multiple = read_text(&mut reader, node.name)?,
                     _ => {}
                 }
             }
@@ -420,7 +420,7 @@ fn parse_aixm_airways(
     let mut grouped: HashMap<String, Vec<AirwayPointRecord>> = HashMap::new();
     for xml in read_baseline_xml_documents(route_segment_zip_bytes)? {
         let mut reader = Reader::from_reader(BufReader::new(Cursor::new(xml.into_bytes())));
-        while find_node(&mut reader, vec![QName(b"aixm:RouteSegment")], None).is_ok() {
+        while find_node(&mut reader, vec![QName("aixm:RouteSegment")], None).is_ok() {
             let mut route_id: Option<String> = None;
             let mut start_id: Option<String> = None;
             let mut end_id: Option<String> = None;
@@ -428,16 +428,16 @@ fn parse_aixm_airways(
             while let Ok(node) = find_node(
                 &mut reader,
                 vec![
-                    QName(b"aixm:routeFormed"),
-                    QName(b"aixm:start"),
-                    QName(b"aixm:end"),
-                    QName(b"aixm:pointChoice_fixDesignatedPoint"),
-                    QName(b"aixm:pointChoice_navaidSystem"),
-                    QName(b"aixm:extension"),
-                    QName(b"aixm:annotation"),
-                    QName(b"aixm:availability"),
+                    QName("aixm:routeFormed"),
+                    QName("aixm:start"),
+                    QName("aixm:end"),
+                    QName("aixm:pointChoice_fixDesignatedPoint"),
+                    QName("aixm:pointChoice_navaidSystem"),
+                    QName("aixm:extension"),
+                    QName("aixm:annotation"),
+                    QName("aixm:availability"),
                 ],
-                Some(QName(b"aixm:RouteSegment")),
+                Some(QName("aixm:RouteSegment")),
             ) {
                 let href_id = |key: &str| {
                     node.attributes
@@ -445,15 +445,15 @@ fn parse_aixm_airways(
                         .map(|s| s.trim_start_matches("urn:uuid:").to_string())
                 };
                 match node.name {
-                    QName(b"aixm:routeFormed") => route_id = href_id("xlink:href"),
-                    QName(b"aixm:start") => {
+                    QName("aixm:routeFormed") => route_id = href_id("xlink:href"),
+                    QName("aixm:start") => {
                         while let Ok(point_node) = find_node(
                             &mut reader,
                             vec![
-                                QName(b"aixm:pointChoice_fixDesignatedPoint"),
-                                QName(b"aixm:pointChoice_navaidSystem"),
+                                QName("aixm:pointChoice_fixDesignatedPoint"),
+                                QName("aixm:pointChoice_navaidSystem"),
                             ],
-                            Some(QName(b"aixm:start")),
+                            Some(QName("aixm:start")),
                         ) {
                             start_id = point_node
                                 .attributes
@@ -461,14 +461,14 @@ fn parse_aixm_airways(
                                 .map(|s| s.trim_start_matches("urn:uuid:").to_string());
                         }
                     }
-                    QName(b"aixm:end") => {
+                    QName("aixm:end") => {
                         while let Ok(point_node) = find_node(
                             &mut reader,
                             vec![
-                                QName(b"aixm:pointChoice_fixDesignatedPoint"),
-                                QName(b"aixm:pointChoice_navaidSystem"),
+                                QName("aixm:pointChoice_fixDesignatedPoint"),
+                                QName("aixm:pointChoice_navaidSystem"),
                             ],
-                            Some(QName(b"aixm:end")),
+                            Some(QName("aixm:end")),
                         ) {
                             end_id = point_node
                                 .attributes
