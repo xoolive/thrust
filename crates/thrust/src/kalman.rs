@@ -17,7 +17,7 @@ pub fn kalman6d(df: DataFrame) -> KalmanOutput {
     for (j, name) in ["x", "y", "z", "dx", "dy", "dz"].into_iter().enumerate() {
         let col = df.column(name)?;
         for (i, value) in col.f64()?.iter().enumerate() {
-            x_mes[(i, j)] = value.map_or(1e24, |v| v);
+            x_mes[(i, j)] = value.unwrap_or(1e24);
         }
     }
 

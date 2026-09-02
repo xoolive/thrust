@@ -58,7 +58,7 @@ export type Connector = { "airway": string } | "DCT" | { "SID": string } | { "ST
  */
 export type Field15Element = Point | Connector | Modifier;
 
-export type JsonValue = number | string | boolean | Array<JsonValue> | { [key in string]?: JsonValue } | null;
+export type JsonValue = number | string | boolean | Array<JsonValue> | { [key in string]: JsonValue } | null;
 
 export type ArcgisFeatureCollectionInput = { features?: Array<JsonValue> | null, };
 
