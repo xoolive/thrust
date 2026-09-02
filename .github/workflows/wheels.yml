@@ -183,6 +183,9 @@ jobs:
       # Used to generate artifact attestation
       attestations: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
       - uses: actions/download-artifact@v8
 
       - name: Verify release version and wheel coverage
