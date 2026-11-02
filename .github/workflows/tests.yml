@@ -296,8 +296,13 @@ jobs:
 
   python-test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
     needs: [rust-core-build, faa-cache-fill, eurocontrol-cache-fill]
     env:
+      UV_PYTHON: ${{ matrix.python-version }}
       FAA_TEST_DATA_DIR: ${{ github.workspace }}/.ci-cache/thrust-faa
       FAA_NASR_AIRAC: "2508"
       THRUST_AIXM_PATH: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol/AIXM
@@ -312,7 +317,7 @@ jobs:
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v7
@@ -339,10 +344,10 @@ jobs:
           path: ${{ github.workspace }}/.ci-cache/thrust-eurocontrol
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
       - name: Python tests
-        run: uv run pytest
+        run: uv run --locked pytest
 
   wasm-lint:
     runs-on: ubuntu-latest
