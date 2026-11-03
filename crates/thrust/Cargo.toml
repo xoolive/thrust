@@ -30,7 +30,7 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", optional = true }
 axum = { version = "0.8", features = ["macros", "tokio"], optional = true }
 tower-http = { version = "0.7", features = ["cors"], optional = true }
-zip = "8.6.0"
+zip = "9.2.2"
 
 [features]
 default = []

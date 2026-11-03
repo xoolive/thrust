@@ -139,7 +139,7 @@ fn read_baseline_xml_documents(zip_bytes: &[u8]) -> Result<Vec<String>, ThrustEr
     let mut xmls = Vec::new();
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
-        if !file.name().ends_with(".BASELINE") {
+        if !file.name()?.ends_with(".BASELINE") {
             continue;
         }
         let mut xml = String::new();
@@ -509,4 +509,57 @@ fn parse_aixm_airways(
             points,
         })
         .collect())
+}
+
+#[cfg(test)]
+mod zip_tests {
+    use super::read_baseline_xml_documents;
+    use crate::error::ThrustError;
+    use std::io::{Cursor, Write};
+    use zip::{write::SimpleFileOptions, ZipWriter};
+
+    fn archive(entries: &[(&str, &str)]) -> Vec<u8> {
+        let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+        for (name, content) in entries {
+            writer.start_file(*name, SimpleFileOptions::default()).unwrap();
+            writer.write_all(content.as_bytes()).unwrap();
+        }
+        writer.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn reads_only_nonempty_baseline_documents_with_unicode_paths() {
+        let bytes = archive(&[
+            ("répertoire/AirportHeliport.BASELINE", "<airport/>"),
+            ("Route.BASELINE", "<route/>"),
+            ("Empty.BASELINE", ""),
+            ("readme.txt", "not XML"),
+        ]);
+        assert_eq!(read_baseline_xml_documents(&bytes).unwrap(), ["<airport/>", "<route/>"]);
+    }
+
+    #[test]
+    fn reads_baseline_document_with_legacy_cp437_filename() {
+        let mut bytes = archive(&[("x.BASELINE", "<legacy/>")]);
+        // Both ZIP headers contain the filename. CP437 byte 0x82 decodes to é
+        // and makes zip 9 return an owned name rather than a borrowed UTF-8 name.
+        let positions: Vec<_> = bytes
+            .windows(b"x.BASELINE".len())
+            .enumerate()
+            .filter_map(|(index, name)| (name == b"x.BASELINE").then_some(index))
+            .collect();
+        assert_eq!(positions.len(), 2);
+        for position in positions {
+            bytes[position] = 0x82;
+        }
+        assert_eq!(read_baseline_xml_documents(&bytes).unwrap(), ["<legacy/>"]);
+    }
+
+    #[test]
+    fn propagates_invalid_archive_errors() {
+        assert!(matches!(
+            read_baseline_xml_documents(b"not a zip archive"),
+            Err(ThrustError::ZipError(_))
+        ));
+    }
 }
