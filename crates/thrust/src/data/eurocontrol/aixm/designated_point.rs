@@ -60,7 +60,7 @@ pub fn parse_designated_point_zip_file<P: AsRef<Path>>(
 
     for i in 0..archive.len() {
         let file = archive.by_index(i)?;
-        if file.name().ends_with(".BASELINE") {
+        if file.name()?.ends_with(".BASELINE") {
             let mut reader = Reader::from_reader(BufReader::new(file));
 
             while let Ok(_nome) = find_node(&mut reader, vec![QName("aixm:DesignatedPoint")], None) {

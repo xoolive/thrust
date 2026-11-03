@@ -49,7 +49,7 @@ pub fn parse_departure_leg_zip_file<P: AsRef<Path>>(path: P) -> Result<HashMap<S
 
     for i in 0..archive.len() {
         let file = archive.by_index(i)?;
-        if file.name().ends_with(".BASELINE") {
+        if file.name()?.ends_with(".BASELINE") {
             let mut reader = Reader::from_reader(BufReader::new(file));
 
             while let Ok(_node) = find_node(&mut reader, vec![QName("aixm:DepartureLeg")], None) {

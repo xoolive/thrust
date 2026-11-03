@@ -82,11 +82,30 @@ fn parse_ddr_airports(text: &str) -> Result<Vec<AirportRecord>, JsValue> {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::io::{Cursor, Write};
+    use zip::{write::SimpleFileOptions, ZipWriter};
 
     use super::{
-        parse_ddr_airports, parse_ddr_airspaces, parse_ddr_airways, procedure_lookup_keys, EurocontrolResolver,
+        find_zip_text_entry, parse_ddr_airports, parse_ddr_airspaces, parse_ddr_airways, procedure_lookup_keys,
+        EurocontrolResolver,
     };
     use crate::models::{AirwayPointRecord, AirwayRecord};
+
+    #[test]
+    fn reads_ddr_zip_entry_with_unicode_directory() {
+        let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+        writer.add_directory("données/", SimpleFileOptions::default()).unwrap();
+        writer.start_file("readme.txt", SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"ignored").unwrap();
+        writer
+            .start_file("données/AIRAC_2611.nnpt", SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"LFBO;FIX;43.6;1.4;_\n").unwrap();
+        let bytes = writer.finish().unwrap().into_inner();
+
+        let text = find_zip_text_entry(&bytes, |name| name == "AIRAC_2611.nnpt").unwrap();
+        assert_eq!(text, "LFBO;FIX;43.6;1.4;_\n");
+    }
 
     #[test]
     fn parse_lfbo_coordinates_from_ddr_arp() {
@@ -511,7 +530,10 @@ fn find_zip_text_entry(ddr_archive: &[u8], predicate: impl Fn(&str) -> bool) -> 
         if entry.is_dir() {
             continue;
         }
-        let name = file_basename(entry.name()).to_string();
+        let entry_name = entry
+            .name()
+            .map_err(|e| JsValue::from_str(&format!("unable to decode DDR zip entry name: {e}")))?;
+        let name = file_basename(&entry_name).to_string();
         if !predicate(&name) {
             continue;
         }

@@ -287,7 +287,7 @@ pub fn parse_nasr_zip_file<P: AsRef<Path>>(path: P) -> Result<Vec<NasrFileSummar
             continue;
         }
 
-        let name = file.name().to_string();
+        let name = file.name()?.into_owned();
         let size_bytes = file.size();
         let compressed_size_bytes = file.compressed_size();
 
@@ -360,7 +360,7 @@ pub fn parse_airspaces_from_nasr_bytes(bytes: &[u8]) -> Result<Vec<NasrAirspace>
     let mut all = Vec::new();
     for i in 0..level2.len() {
         let mut entry = level2.by_index(i)?;
-        if !entry.name().to_lowercase().ends_with(".xml") {
+        if !entry.name()?.to_lowercase().ends_with(".xml") {
             continue;
         }
         let mut xml = Vec::new();
@@ -714,7 +714,7 @@ fn open_csv_bundle_from_bytes(bytes: &[u8]) -> Result<ZipArchive<Cursor<Vec<u8>>
 
     for i in 0..outer.len() {
         let mut entry = outer.by_index(i)?;
-        let name = entry.name().to_string();
+        let name = entry.name()?.into_owned();
         if name.starts_with("CSV_Data/") && name.ends_with("_CSV.zip") {
             let mut inner_bytes = Vec::new();
             std::io::copy(&mut entry, &mut inner_bytes)?;
@@ -731,7 +731,7 @@ fn open_csv_bundle<P: AsRef<Path>>(path: P) -> Result<ZipArchive<Cursor<Vec<u8>>
 
     for i in 0..outer.len() {
         let mut entry = outer.by_index(i)?;
-        let name = entry.name().to_string();
+        let name = entry.name()?.into_owned();
         if name.starts_with("CSV_Data/") && name.ends_with("_CSV.zip") {
             let mut bytes = Vec::new();
             std::io::copy(&mut entry, &mut bytes)?;
@@ -1174,12 +1174,40 @@ fn inspect_delimited_content<R: std::io::Read>(file: R) -> Result<DelimitedConte
 
 #[cfg(test)]
 mod tests {
-    use super::{build_procedure_records, read_csv_rows, NasrAirwayPointRecord, NasrProcedureLeg};
+    use super::{
+        build_procedure_records, open_csv_bundle_from_bytes, read_csv_rows, NasrAirwayPointRecord, NasrProcedureLeg,
+    };
     use crate::data::field15::{Connector, Field15Element, Field15Parser};
     use std::collections::HashMap;
     use std::io::{Cursor, Write};
     use zip::write::SimpleFileOptions;
     use zip::ZipWriter;
+
+    fn zip_entries(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+        for (name, bytes) in entries {
+            writer.start_file(*name, SimpleFileOptions::default()).unwrap();
+            writer.write_all(bytes).unwrap();
+        }
+        writer.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn finds_nested_csv_bundle_with_unicode_name() {
+        let inner = zip_entries(&[("APT_BASE.csv", b"ICAO_ID,ARPT_ID\nKLAX,LAX\n")]);
+        let outer = zip_entries(&[("readme.txt", b"ignored"), ("CSV_Data/résumé_CSV.zip", &inner)]);
+        let mut bundle = open_csv_bundle_from_bytes(&outer).unwrap();
+        let rows = read_csv_rows(&mut bundle, "APT_BASE.csv").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].get("ICAO_ID").map(String::as_str), Some("KLAX"));
+    }
+
+    #[test]
+    fn reports_missing_csv_bundle() {
+        let outer = zip_entries(&[("readme.txt", b"ignored")]);
+        let error = open_csv_bundle_from_bytes(&outer).unwrap_err();
+        assert!(error.to_string().contains("CSV bundle not found"));
+    }
 
     #[test]
     fn read_csv_rows_tolerates_invalid_utf8() {

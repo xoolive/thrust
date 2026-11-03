@@ -30,7 +30,7 @@ pub(crate) fn read_first_zip_entry_bytes<P: AsRef<Path>>(
         if entry.is_dir() {
             continue;
         }
-        let name = entry.name().to_string();
+        let name = entry.name()?.into_owned();
         if predicate(&name) {
             let mut bytes = Vec::new();
             entry.read_to_end(&mut bytes)?;
